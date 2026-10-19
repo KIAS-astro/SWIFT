@@ -27,7 +27,7 @@ import shutil
 
 import numpy as np
 
-from swiftreg import units
+from swiftreg import params, units
 from swiftreg.checks import Check
 from swiftreg.snapshot import snapshots
 
@@ -44,7 +44,7 @@ ETA_RANGE = (10 ** -0.86 * 1.0 ** -0.07, 10 ** -0.86 * 1e-4 ** -0.07)
 
 
 def run(ctx):
-    for t in ("coolingtables", "photometry"):
+    for t in (params.PRFM_COOLING_TABLE, "photometry"):
         ctx.table(t)
     ics = prfm_disc.ic_file(ctx.data_dir)
     shutil.copy(ics, ctx.path(prfm_disc.IC_NAME))
@@ -59,10 +59,10 @@ def run(ctx):
 
 
 def _disc_params(ctx):
-    from swiftreg import params
     soft = prfm_disc.SOFTENING
     p = params.eagle_base(prfm_disc.IC_NAME, T_END_MYR * MYR_INTERNAL, ctx.data_dir,
-                          10.0 * MYR_INTERNAL, dt_max=1e-2)
+                          10.0 * MYR_INTERNAL, dt_max=1e-2,
+                          cooling=params.PRFM_COOLING)
     for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
         p.pop(sec)
     p["InitialConditions"].update({"periodic": 0, "stars_smoothing_length": 0.5})

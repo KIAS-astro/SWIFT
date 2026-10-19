@@ -40,7 +40,7 @@ from swiftreg.snapshot import snapshots
 
 DESCRIPTION = "PRFM-int: conversion in a uniform gas layer matches t_dep = 2 Upsilon / (pi G Sigma_g)"
 TIER = "quick"
-BUILDS = {"prfm": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE",
+BUILDS = {"prfm": [params.PRFM_COOLING_FLAG, "--with-chemistry=EAGLE",
                    "--with-tracers=EAGLE", "--with-stars=EAGLE",
                    "--with-star-formation=PRFM", "--with-entropy-floor=PRFM",
                    "--with-ext-potential=constant"]}
@@ -99,7 +99,7 @@ def write_layer(path, Sigma_msun_pc2):
 
 def run(ctx):
     ctx.table("photometry")
-    ctx.table("coolingtables")
+    ctx.table(params.PRFM_COOLING_TABLE)
     for S in SIGMAS:
         name = f"sigma{S:g}"
         os.makedirs(ctx.path(name))
@@ -107,7 +107,7 @@ def run(ctx):
         t_dep = t_dep_layer(Sigma) / units.UNIT_TIME
         t_end = FRACTION * t_dep
         p = params.eagle_base("ics.hdf5", t_end, ctx.data_dir, t_end,
-                              dt_max=DT_MAX * t_dep)
+                              dt_max=DT_MAX * t_dep, cooling=params.PRFM_COOLING)
         with open(ctx.path(name, "output_list.txt"), "w") as f:
             f.write(f"# Time\n{T_EARLY * t_dep!r}\n{t_end!r}\n")
         p["Snapshots"].update({"output_list_on": 1, "output_list": "output_list.txt"})

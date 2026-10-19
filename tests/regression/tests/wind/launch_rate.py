@@ -55,12 +55,12 @@ U_STAR = 1e51 / (95.5 * units.SOLAR_MASS)  # erg / g
 
 def run(ctx):
     ctx.table("photometry")
-    ctx.table("coolingtables")
+    ctx.table(params.PRFM_COOLING_TABLE)
     Sigma = slab.write_layer(ctx.path("ics.hdf5"), SIGMA)
     t_dep = slab.t_dep_layer(Sigma) / units.UNIT_TIME
     t_end = FRACTION * t_dep
     p = params.eagle_base("ics.hdf5", t_end, ctx.data_dir, t_end,
-                          dt_max=slab.DT_MAX * t_dep)
+                          dt_max=slab.DT_MAX * t_dep, cooling=params.PRFM_COOLING)
     for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
         p.pop(sec)
     p["ConstantPotential"] = {"g_cgs": [0.0, 0.0, 0.0]}

@@ -2,8 +2,9 @@
 
 Phase B4 of the PRFM design (ai-notes docs-code/SWIFT-star-formation/
 prfm-design.md): the H12 disc with PRFM-int star formation and the TIGRESS
-effective EoS as a floor, EAGLE cooling, and no feedback (D2: with PRFM the
-feedback is a decoupled wind, which does not exist yet).
+effective EoS as a floor, EAGLE cooling (PS2020 with SWIFT_REG_COOLING=PS2020),
+and no feedback (D2: with PRFM the feedback is a decoupled wind, which does
+not exist yet).
 
 ICs: the H12 disc of Chaikin et al. (2023) at the two reference resolutions,
 H12_m1.6e6 (gas particle mass 1.6e6 Msun, softening 0.5 kpc) and H12_m1.3e7
@@ -39,7 +40,7 @@ from swiftreg.snapshot import snapshots
 
 DESCRIPTION = "isolated MW-mass disc, PRFM-int SF + TIGRESS EoS floor, no feedback"
 TIER = "long"
-BUILDS = {"prfm": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE",
+BUILDS = {"prfm": [params.PRFM_COOLING_FLAG, "--with-chemistry=EAGLE",
                    "--with-tracers=EAGLE", "--with-stars=EAGLE",
                    "--with-star-formation=PRFM", "--with-entropy-floor=PRFM",
                    "--with-ext-potential=hernquist"]}
@@ -69,13 +70,14 @@ def ic_file(data_dir):
 
 
 def run(ctx):
-    for t in ("coolingtables", "photometry"):
+    for t in (params.PRFM_COOLING_TABLE, "photometry"):
         ctx.table(t)
     ics = ic_file(ctx.data_dir)
     for name, (sf, floor_cal) in RUNS.items():
         os.makedirs(ctx.path(name))
         shutil.copy(ics, ctx.path(name, IC_NAME))
-        p = params.eagle_base(IC_NAME, T_END, ctx.data_dir, DT_SNAP, dt_max=1e-2)
+        p = params.eagle_base(IC_NAME, T_END, ctx.data_dir, DT_SNAP, dt_max=1e-2,
+                              cooling=params.PRFM_COOLING)
         for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
             p.pop(sec)
         p["InitialConditions"].update({"periodic": 0, "stars_smoothing_length": 0.5})

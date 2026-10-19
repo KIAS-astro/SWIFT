@@ -31,7 +31,7 @@ import os
 
 import numpy as np
 
-from swiftreg import ics, units
+from swiftreg import ics, params, units
 from swiftreg.checks import Check
 from swiftreg.snapshot import snapshots
 
@@ -84,7 +84,7 @@ def write_ics(path):
 
 
 def run(ctx):
-    ctx.table("coolingtables")
+    ctx.table(params.PRFM_COOLING_TABLE)
     ctx.table("photometry")
     write_ics(ctx.path("ics.hdf5"))
     myr = _common.MYR

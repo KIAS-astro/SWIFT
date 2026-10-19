@@ -34,7 +34,7 @@ import os
 import h5py
 import numpy as np
 
-from swiftreg import ics, units
+from swiftreg import ics, params, units
 from swiftreg.checks import Check
 from swiftreg.snapshot import snapshots
 
@@ -89,7 +89,7 @@ def write_ics(path, wind, flag):
 
 
 def run(ctx):
-    ctx.table("coolingtables")
+    ctx.table(params.PRFM_COOLING_TABLE)
     ctx.table("photometry")
     t_end = T_END * _common.MYR
     for name, wind, flag in (("B", False, 0), ("A", True, 1), ("C", True, 0)):

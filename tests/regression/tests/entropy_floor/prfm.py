@@ -8,7 +8,7 @@ the EAGLE floor it is imposed in the cooling step, u = max(u_cooled, u_floor),
 and in the hydro kick.
 
 Uniform boxes with EAGLE cooling at z = 0 (Wiersma et al. 2009 tables, solar
-metallicity) for 5 Myr:
+metallicity; PS2020 tables with SWIFT_REG_COOLING=PS2020) for 5 Myr:
   n_H = 1, 10, 100 cm^-3 from 100 K: radiative equilibrium (< 1e4 K) lies far
       below the floor (4.1e4, 2.6e5, 1.6e6 K for neutral gas), so the gas must
       sit on it;
@@ -39,7 +39,7 @@ from swiftreg.snapshot import snapshots
 
 DESCRIPTION = "PRFM entropy floor: gas above n_th = 0.13 ends on P_eff(n_H) (OK22, K24)"
 TIER = "quick"
-BUILDS = {"prfm": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE",
+BUILDS = {"prfm": [params.PRFM_COOLING_FLAG, "--with-chemistry=EAGLE",
                    "--with-tracers=EAGLE", "--with-stars=EAGLE",
                    "--with-star-formation=PRFM", "--with-entropy-floor=PRFM",
                    "--with-ext-potential=constant"]}
@@ -74,13 +74,14 @@ def p_eff(rho_cgs, cal, Zp=1.0):
 
 
 def run(ctx):
-    ctx.table("coolingtables")
+    ctx.table(params.PRFM_COOLING_TABLE)
     for name, (nH, T, cal, cool, _) in CASES.items():
         # uniform_gas sets rho = n m_p / X_H; this gives rho = 1.4 m_p nH
         gas, _ = ics.uniform_gas(N, BOX, 1.4 * units.HYDROGEN_FRACTION * nH, T)
         os.makedirs(ctx.path(name))
         ics.write(ctx.path(name, "ics.hdf5"), BOX, gas=gas)
-        p = params.eagle_base("ics.hdf5", T_END, ctx.data_dir, T_END, dt_max=1e-4)
+        p = params.eagle_base("ics.hdf5", T_END, ctx.data_dir, T_END, dt_max=1e-4,
+                              cooling=params.PRFM_COOLING)
         for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
             p.pop(sec)
         p["PRFMEntropyFloor"] = {"calibration": cal, "density_threshold_H_p_cm3": N_TH,

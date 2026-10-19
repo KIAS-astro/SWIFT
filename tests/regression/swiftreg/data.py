@@ -13,12 +13,16 @@ import tarfile
 
 WEB = "https://virgodb.cosma.dur.ac.uk/swift-webstorage"
 
-# name -> (URL of a tar.gz that unpacks to <name>/, file that proves presence)
+# name -> (URL, file that proves presence). A tar.gz unpacks to <name>/;
+# any other URL is a single file, downloaded into <name>/ under the marker name.
 TABLES = {
     "coolingtables": (f"{WEB}/CoolingTables/EAGLE/coolingtables.tar.gz",
                       "redshifts.dat"),
     "yieldtables": (f"{WEB}/YieldTables/EAGLE/yieldtables.tar.gz", None),
     "photometry": (f"{WEB}/YieldTables/EAGLE/photometry.tar.gz", None),
+    "coolingtables_ps2020": (
+        f"{WEB}/CoolingTables/COLIBRE/UV_dust1_CR1_G1_shield1.hdf5",
+        "UV_dust1_CR1_G1_shield1.hdf5"),
 }
 
 
@@ -38,6 +42,12 @@ def ensure(name, data_dir, log=print):
             return target
 
     log(f"  downloading {name} from {url}")
+    if not url.endswith(".tar.gz"):
+        os.makedirs(target, exist_ok=True)
+        partial = os.path.join(target, marker + ".part")
+        subprocess.run(["curl", "-fsSL", "-o", partial, url], check=True)
+        os.rename(partial, os.path.join(target, marker))
+        return target
     archive = os.path.join(data_dir, f"{name}.tar.gz")
     subprocess.run(["curl", "-fsSL", "-o", archive, url], check=True)
     with tarfile.open(archive) as tar:

@@ -9,7 +9,7 @@ at the start time with its initial velocity and internal energy.
 
 from swiftreg import params, units
 
-WIND_BUILD = ["--with-cooling=EAGLE", "--with-chemistry=EAGLE",
+WIND_BUILD = [params.PRFM_COOLING_FLAG, "--with-chemistry=EAGLE",
               "--with-tracers=EAGLE", "--with-stars=EAGLE",
               "--with-star-formation=PRFM", "--with-entropy-floor=PRFM",
               "--with-ext-potential=constant", "--with-wind=TIGRESS"]
@@ -28,7 +28,8 @@ ACC_UNIT = units.UNIT_VELOCITY ** 2 / units.UNIT_LENGTH
 def base_params(ctx, ic_file, t_end, snapshot_dt, dt_max, g_cgs=(0.0, 0.0, 0.0)):
     """eagle_base without the EAGLE subgrid sections, with the PRFM floor
     (threshold 0.13 cm^-3, inactive in the low-density boxes used here)."""
-    p = params.eagle_base(ic_file, t_end, ctx.data_dir, snapshot_dt, dt_max=dt_max)
+    p = params.eagle_base(ic_file, t_end, ctx.data_dir, snapshot_dt, dt_max=dt_max,
+                          cooling=params.PRFM_COOLING)
     for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
         p.pop(sec)
     p["ConstantPotential"] = {"g_cgs": list(g_cgs)}

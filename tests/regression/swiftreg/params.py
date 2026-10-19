@@ -7,8 +7,20 @@ are written here directly.
 """
 
 import copy
+import os
 
 from . import units
+
+# Cooling of the PRFM tests (PRFM star formation, entropy floor and the
+# decoupled wind): EAGLE (Wiersma et al. 2009 tables) by default;
+# SWIFT_REG_COOLING=PS2020 selects Ploeckinger & Schaye (2020), as in the
+# EAGLE-XL subgrid preset. The EAGLE-model tests always use EAGLE cooling.
+PRFM_COOLING = os.environ.get("SWIFT_REG_COOLING", "EAGLE").upper()
+if PRFM_COOLING not in ("PS2020", "EAGLE"):
+    raise ValueError(f"SWIFT_REG_COOLING={PRFM_COOLING}: use PS2020 or EAGLE")
+PRFM_COOLING_FLAG = f"--with-cooling={PRFM_COOLING}"
+PRFM_COOLING_TABLE = {"PS2020": "coolingtables_ps2020",
+                      "EAGLE": "coolingtables"}[PRFM_COOLING]
 
 
 def _format_value(value):
@@ -65,14 +77,44 @@ EAGLE_SOLAR_ABUNDANCES = {
 }
 
 
-def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
+def cooling_section(cooling, data_dir):
+    """{section name: parameters} for EAGLE or PS2020 cooling.
+
+    EAGLE: examples/IsolatedGalaxy/IsolatedGalaxy_feedback. PS2020:
+    examples/EAGLE_low_z/EAGLE_6, with the table UV_dust1_CR1_G1_shield1
+    (UV background, dust, cosmic rays, ISRF and self-shielding).
+    """
+    if cooling == "PS2020":
+        return {"PS2020Cooling": {
+            "dir_name": f"{data_dir}/coolingtables_ps2020/UV_dust1_CR1_G1_shield1.hdf5",
+            "H_reion_z": 11.5,
+            "H_reion_eV_p_H": 2.0,
+            "He_reion_z_centre": 3.5,
+            "He_reion_z_sigma": 0.5,
+            "He_reion_eV_p_H": 2.0,
+            "delta_logTEOS_subgrid_properties": 0.3,
+            "rapid_cooling_threshold": 0.333333,
+        }}
+    return {"EAGLECooling": {
+        "dir_name": f"{data_dir}/coolingtables/",
+        "H_reion_z": 7.5,
+        "H_reion_eV_p_H": 2.0,
+        "He_reion_z_centre": 3.5,
+        "He_reion_z_sigma": 0.5,
+        "He_reion_eV_p_H": 2.0,
+    }}
+
+
+def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3,
+               cooling="EAGLE"):
     """Parameters for a non-cosmological, periodic EAGLE-physics test box.
 
     The physics sections follow examples/IsolatedGalaxy/IsolatedGalaxy_feedback
     (EAGLE reference values). The entropy floor uses the EAGLE reference
     model of Schaye et al. (2015): Jeans floor 8000 K at n_H = 0.1 cm^-3
     with slope 4/3, and an 8000 K isothermal floor above n_H = 1e-5 cm^-3.
-    Tests override what they need with merge().
+    Tests override what they need with merge(). `cooling` (EAGLE or
+    PS2020) selects the cooling section.
     """
     return {
         "MetaData": {"run_name": "swift-regression"},
@@ -121,14 +163,7 @@ def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
             "max_physical_DM_softening": 0.01,
             "max_physical_baryon_softening": 0.01,
         },
-        "EAGLECooling": {
-            "dir_name": f"{data_dir}/coolingtables/",
-            "H_reion_z": 7.5,
-            "H_reion_eV_p_H": 2.0,
-            "He_reion_z_centre": 3.5,
-            "He_reion_z_sigma": 0.5,
-            "He_reion_eV_p_H": 2.0,
-        },
+        **cooling_section(cooling, data_dir),
         "EAGLEChemistry": dict(EAGLE_SOLAR_ABUNDANCES),
         "EAGLEStarFormation": {
             "SF_threshold": "Zdep",

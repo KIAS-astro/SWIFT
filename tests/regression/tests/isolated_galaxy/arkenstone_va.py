@@ -14,6 +14,14 @@ with eta_E = eta_E,kin + eta_E,th and kinetic_fraction = eta_E,kin / eta_E:
   nowind    Wind:loading_model none
   lowspec   eta_M = 6.41, eta_E = 0.966, kinetic fraction 0.8996 (Mach 4)
   highspec  eta_M = 0.32, eta_E = 0.900, kinetic fraction 0.3567 (Mach 1)
+and, only when named: medspec (S24a MedSpecArk: eta_M = 0.24, eta_E = 0.135,
+kinetic fraction 0.3556, Mach 1; test V-B) and tigress (the K20b hot-phase loadings at
+each particle's Sigma_SFR).
+Recoupling SWIFT_REG_ARK_RECOUPLE (test V-E): dist2 (default: max(2 kpc, 2 kernel
+supports) or 25 Myr), dist5, dist10, density (ambient n_H < 0.013 cm^-3 = 0.1 of our
+star formation threshold, as S24a's 0.1 rho_SF; 100 Myr backstop), host (dist2, the
+particle merged into its nearest gas neighbour: the analogue of S24a's standard
+recoupling into a host cell) and density_host.
 Resolution SWIFT_REG_ARK_RES = m2e5 (default; softening 0.2 kpc) or m1.6e6 (0.4 kpc).
 Length SWIFT_REG_ARK_TEND_MYR (default 1000), snapshots every 10 Myr.
 
@@ -84,9 +92,26 @@ WINDS = {
                 "kinetic_fraction": 0.869 / 0.966},
     "highspec": {"loading_model": "constant", "eta_M": 0.32, "eta_E": 0.900,
                  "kinetic_fraction": 0.321 / 0.900},
+    "medspec": {"loading_model": "constant", "eta_M": 0.24, "eta_E": 0.135,
+                "kinetic_fraction": 0.048 / 0.135},
+    "tigress": {"loading_model": "TIGRESS"},
 }
+DEFAULT_RUNS = ("nowind", "lowspec", "highspec")
 _only = os.environ.get("SWIFT_REG_ARK_RUNS")
-RUNS = [k for k in WINDS if not _only or k in _only.split(",")]
+RUNS = [k for k in WINDS if (k in _only.split(",") if _only else k in DEFAULT_RUNS)]
+
+# Recoupling variants (test V-E and the host-deposit control)
+RECOUPLINGS = {
+    "dist2": {},
+    "dist5": {"recoupling_distance_kpc": 5.0},
+    "dist10": {"recoupling_distance_kpc": 10.0},
+    "density": {"recoupling_mode": "density", "recoupling_density_H_p_cm3": 0.013,
+                "recoupling_time_Myr": 100.0},
+    "host": {"recoupling_deposit": "host"},
+    "density_host": {"recoupling_mode": "density", "recoupling_density_H_p_cm3": 0.013,
+                     "recoupling_time_Myr": 100.0, "recoupling_deposit": "host"},
+}
+RECOUPLE = os.environ.get("SWIFT_REG_ARK_RECOUPLE", "dist2")
 
 
 def ic_file(data_dir):
@@ -126,6 +151,7 @@ def parameters(data_dir, t_end_myr, dt_snap_myr, wind):
     p["Wind"] = dict(wind, launch_direction=[0.0, 0.0, 1.0],
                      recoupling_distance_kpc=2.0, recoupling_kernel_factor=2.0,
                      recoupling_time_Myr=25.0, max_timestep_Myr=1.0)
+    p["Wind"].update(RECOUPLINGS[RECOUPLE])
     return p
 
 

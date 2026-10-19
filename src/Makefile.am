@@ -124,6 +124,9 @@ endif
 if HAVEEAGLEKINETICFEEDBACK
 EAGLE_FEEDBACK_SOURCES += feedback/EAGLE_kinetic/feedback.c
 endif
+if HAVEEAGLETHERMALKINETICFEEDBACK
+EAGLE_FEEDBACK_SOURCES += feedback/EAGLE_thermal_kinetic/feedback.c
+endif
 
 # source files for GRACKLE cooling
 GRACKLE_COOLING_SOURCES =
@@ -488,6 +491,9 @@ nobase_noinst_HEADERS += feedback/AGORA/feedback_debug.h
 nobase_noinst_HEADERS += feedback/EAGLE_kinetic/feedback.h feedback/EAGLE_kinetic/feedback_struct.h
 nobase_noinst_HEADERS += feedback/EAGLE_kinetic/feedback_properties.h feedback/EAGLE_kinetic/feedback_iact.h
 nobase_noinst_HEADERS += feedback/EAGLE_kinetic/feedback_debug.h
+nobase_noinst_HEADERS += feedback/EAGLE_thermal_kinetic/feedback.h feedback/EAGLE_thermal_kinetic/feedback_struct.h
+nobase_noinst_HEADERS += feedback/EAGLE_thermal_kinetic/feedback_properties.h feedback/EAGLE_thermal_kinetic/feedback_iact.h
+nobase_noinst_HEADERS += feedback/EAGLE_thermal_kinetic/feedback_debug.h
 nobase_noinst_HEADERS += feedback/EAGLE_thermal/feedback.h feedback/EAGLE_thermal/feedback_struct.h
 nobase_noinst_HEADERS += feedback/EAGLE_thermal/feedback_properties.h feedback/EAGLE_thermal/feedback_iact.h
 nobase_noinst_HEADERS += feedback/EAGLE_thermal/feedback_debug.h

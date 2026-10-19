@@ -973,6 +973,7 @@ INPUT                  = @top_srcdir@ \
                          @top_srcdir@/src/feedback/EAGLE \
                          @top_srcdir@/src/feedback/EAGLE_thermal \
                          @top_srcdir@/src/feedback/EAGLE_kinetic \
+                         @top_srcdir@/src/feedback/EAGLE_thermal_kinetic \
                          @top_srcdir@/src/feedback/GEAR \
                          @top_srcdir@/src/black_holes/Default \
                          @top_srcdir@/src/black_holes/EAGLE \

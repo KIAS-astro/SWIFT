@@ -2914,7 +2914,7 @@ esac
 # Feedback model
 AC_ARG_WITH([feedback],
    [AS_HELP_STRING([--with-feedback=<model>],
-      [Feedback model to use @<:@none, EAGLE, EAGLE-thermal, EAGLE-kinetic, GEAR, AGORA default: none@:>@]
+      [Feedback model to use @<:@none, EAGLE, EAGLE-thermal, EAGLE-kinetic, EAGLE-thermal-kinetic, GEAR, AGORA default: none@:>@]
    )],
    [with_feedback="$withval"],
    [with_feedback="none"]
@@ -2933,6 +2933,10 @@ case "$with_feedback" in
    EAGLE-kinetic)
       AC_DEFINE([FEEDBACK_EAGLE_KINETIC], [1], [EAGLE kinetic stellar feedback and evolution model])
       with_feedback_name="EAGLE kinetic stellar feedback and evolution model"
+   ;;
+   EAGLE-thermal-kinetic)
+      AC_DEFINE([FEEDBACK_EAGLE_THERMAL_KINETIC], [1], [EAGLE thermal-kinetic stellar feedback and evolution model])
+      with_feedback_name="EAGLE thermal-kinetic stellar feedback and evolution model"
    ;;
    EAGLE-thermal)
       AC_DEFINE([FEEDBACK_EAGLE_THERMAL], [1], [EAGLE thermal stellar feedback and evolution model])
@@ -3425,6 +3429,7 @@ AM_CONDITIONAL([HAVEPS2020COOLING], [test "$with_cooling" = "PS2020"])
 # Check if using EAGLE feedback
 AM_CONDITIONAL([HAVEEAGLETHERMALFEEDBACK], [test "${with_feedback%-thermal}" = "EAGLE"])
 AM_CONDITIONAL([HAVEEAGLEKINETICFEEDBACK], [test "$with_feedback" = "EAGLE-kinetic"])
+AM_CONDITIONAL([HAVEEAGLETHERMALKINETICFEEDBACK], [test "$with_feedback" = "EAGLE-thermal-kinetic"])
 
 # check if using grackle cooling
 AM_CONDITIONAL([HAVEGRACKLECOOLING], [test "$with_cooling" = "grackle"])

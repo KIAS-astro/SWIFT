@@ -49,24 +49,24 @@ def snii_per_msun(m_min=8.0, m_max=100.0):
     return quad(chabrier, m_min, m_max, points=[1.0] if m_min < 1 else None)[0] / norm
 
 
-def setup(ctx, feedback_overrides):
+def setup(ctx, feedback_overrides, n_stars=N_STARS, t_end=T_END):
     """Write ICs and parameters; return (params, gas mass, star mass) in cgs."""
-    gas, mgas_msun = ics.uniform_gas(N, BOX, NH, T_GAS)
+    gas, _ = ics.uniform_gas(N, BOX, NH, T_GAS)
     rng = np.random.default_rng(SEED)
     mstar = STAR_MASS_IN_GAS_MASSES * gas["Masses"][0]
     stars = {
-        "Coordinates": rng.uniform(0, BOX, size=(N_STARS, 3)),
-        "Velocities": np.zeros((N_STARS, 3)),
-        "Masses": np.full(N_STARS, mstar),
-        "SmoothingLength": np.full(N_STARS, 1.2348 * BOX / N),
-        "ParticleIDs": np.arange(N ** 3 + 1, N ** 3 + 1 + N_STARS, dtype=np.uint64),
+        "Coordinates": rng.uniform(0, BOX, size=(n_stars, 3)),
+        "Velocities": np.zeros((n_stars, 3)),
+        "Masses": np.full(n_stars, mstar),
+        "SmoothingLength": np.full(n_stars, 1.2348 * BOX / N),
+        "ParticleIDs": np.arange(N ** 3 + 1, N ** 3 + 1 + n_stars, dtype=np.uint64),
     }
     ics.write(ctx.path("ics.hdf5"), BOX, gas=gas, stars=stars)
 
     ctx.table("photometry")
     ctx.table("coolingtables")
     ctx.table("yieldtables")
-    p = params.eagle_base("ics.hdf5", T_END, ctx.data_dir, T_END / N_SNAP, dt_max=1e-3)
+    p = params.eagle_base("ics.hdf5", t_end, ctx.data_dir, t_end / N_SNAP, dt_max=1e-3)
     p["ConstantPotential"] = {"g_cgs": [0.0, 0.0, 0.0]}
     p["Stars"].update({"overwrite_birth_time": 1, "birth_time": 0.0})
     fb = p["EAGLEFeedback"]

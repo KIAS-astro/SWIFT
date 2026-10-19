@@ -53,8 +53,9 @@ class Context:
         return data.ensure(name, self.data_dir, log=self.log)
 
     def swift(self, params, flags, binary=None, name="run", subdir=None,
-              timeout=3600):
-        """Run SWIFT; binary defaults to the test's only build."""
+              timeout=3600, threads=None):
+        """Run SWIFT; binary defaults to the test's only build. threads overrides
+        --threads (e.g. 1 for runs that must be bitwise reproducible)."""
         if binary is None:
             if len(self.binaries) != 1:
                 raise ValueError("test has several builds; name one")
@@ -62,7 +63,8 @@ class Context:
         elif binary in self.binaries:
             binary = self.binaries[binary]
         rdir = self.path(subdir) if subdir else self.run_dir
-        wall = swift.run(binary, params, rdir, flags, threads=self.threads,
+        wall = swift.run(binary, params, rdir, flags,
+                         threads=self.threads if threads is None else threads,
                          name=name, timeout=timeout)
         self.log(f"  ran {name}{' in ' + subdir if subdir else ''}: {wall:.1f} s")
         return rdir

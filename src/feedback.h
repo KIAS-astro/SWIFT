@@ -30,6 +30,9 @@
 #elif defined(FEEDBACK_EAGLE_KINETIC)
 #include "./feedback/EAGLE_kinetic/feedback.h"
 #define EXTRA_STAR_LOOPS
+#elif defined(FEEDBACK_EAGLE_THERMAL_KINETIC)
+#include "./feedback/EAGLE_thermal_kinetic/feedback.h"
+#define EXTRA_STAR_LOOPS
 #elif defined(FEEDBACK_GEAR)
 #include "./feedback/GEAR_thermal/feedback.h"
 #elif defined(FEEDBACK_AGORA)

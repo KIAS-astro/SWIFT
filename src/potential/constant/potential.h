@@ -100,7 +100,10 @@ external_gravity_get_potential_energy(
   const float gh = g->x[0] * potential->g[0] + g->x[1] * potential->g[1] +
                    g->x[2] * potential->g[2];
 
-  return g->mass * gh;
+  /* Per unit mass, as for the other potentials: statistics.c multiplies by
+   * the mass. The acceleration is +g, so phi = -g.x; potential->g is stored
+   * divided by G (see potential_init_backend). */
+  return -phys_const->const_newton_G * gh;
 }
 
 /**

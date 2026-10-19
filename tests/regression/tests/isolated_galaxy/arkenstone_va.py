@@ -152,7 +152,8 @@ def parameters(data_dir, t_end_myr, dt_snap_myr, wind):
                      recoupling_distance_kpc=2.0, recoupling_kernel_factor=2.0,
                      recoupling_time_Myr=25.0, max_timestep_Myr=1.0)
     p["Wind"].update(RECOUPLINGS[RECOUPLE])
-    if p["Wind"].get("recoupling_deposit") == "host":
+    if (p["Wind"].get("recoupling_deposit") == "host"
+            and not os.environ.get("SWIFT_REG_ARK_NOSPLIT")):
         # A host that absorbs a wind particle is split back to the base mass at
         # the next rebuild, as Arepo derefines/refines S24a's host cell to its
         # target mass. Without it LowSpec hosts absorbed up to 15 particles and

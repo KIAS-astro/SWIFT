@@ -185,6 +185,25 @@ void space_split_recursive(struct space *s, struct cell *c,
 
   /* If the depth is too large, we have a problem and should stop. */
   if (depth > space_cell_maxdepth) {
+    message("DEBUG cell loc %.17g %.17g %.17g width %.3g count %d gcount %d scount %d",
+            c->loc[0], c->loc[1], c->loc[2], c->width[0], count, gcount, scount);
+    for (int k = 0; k < gcount && k < 30; k++) {
+      const struct gpart *gp = &gparts[k];
+      message(
+          "DEBUG gpart %d x %.17g %.17g %.17g m %g type %d bin %d off %lld v %g "
+          "%g %g",
+          k, gp->x[0], gp->x[1], gp->x[2], gp->mass, gp->type, gp->time_bin,
+          gp->id_or_neg_offset, gp->v_full[0], gp->v_full[1], gp->v_full[2]);
+    }
+    for (int k = 0; k < count && k < 30; k++) {
+      const struct part *p = &parts[k];
+      message(
+          "DEBUG part %d id %lld x %.17g %.17g %.17g m %g h %g bin %d dec %d "
+          "launches %d pending %d rho_amb %g",
+          k, p->id, p->x[0], p->x[1], p->x[2], p->mass, p->h, p->time_bin,
+          p->wind_data.decoupled, p->wind_data.launch_count,
+          p->wind_data.recouple_pending, p->wind_data.rho_ambient);
+    }
     error(
         "Exceeded maximum depth (%d) when splitting cells, aborting. This is "
         "most likely due to having too many particles at the exact same "

@@ -41,13 +41,24 @@ BUILDS = {"wind": prfm_disc.BUILDS["prfm"] + ["--with-wind=TIGRESS"]}
 MYR_INTERNAL = units.MYR / units.UNIT_TIME
 T_END_MYR = float(os.environ.get("SWIFT_REG_WIND_TEND_MYR", "100"))
 ETA_RANGE = (10 ** -0.86 * 1.0 ** -0.07, 10 ** -0.86 * 1e-4 ** -0.07)
+# SWIFT_REG_WIND_CGM=1: the disc inside a hot CGM (swift-ism-model add_cgm.py).
+# Halo particles at 30-170 kpc need h = 20-60 kpc, and h_max must stay below
+# the top-level cell (4565 kpc / 8).
+CGM = os.environ.get("SWIFT_REG_WIND_CGM", "0") == "1"
+IC_NAME = f"{prfm_disc.RES}_cgm_disk.hdf5" if CGM else prfm_disc.IC_NAME
+H_MAX = 150.0 if CGM else 10.0
+TOP_LEVEL_CELLS = 8 if CGM else 16
+R200_KPC = 228.0
 
 
 def run(ctx):
     for t in (params.PRFM_COOLING_TABLE, "photometry"):
         ctx.table(t)
-    ics = prfm_disc.ic_file(ctx.data_dir)
-    shutil.copy(ics, ctx.path(prfm_disc.IC_NAME))
+    ics = os.path.join(ctx.data_dir, "ics", IC_NAME)
+    if not os.path.exists(ics):
+        raise FileNotFoundError(f"{ics}: make it with swift-ism-model "
+                                "tests/isolated_galaxy/make_ics.py (and add_cgm.py)")
+    shutil.copy(ics, ctx.path(IC_NAME))
     # Reuse the prfm_disc parameters by building them the same way
     p = _disc_params(ctx)
     p["Wind"] = {"loading_model": "TIGRESS", "launch_direction": [0.0, 0.0, 1.0],
@@ -60,7 +71,7 @@ def run(ctx):
 
 def _disc_params(ctx):
     soft = prfm_disc.SOFTENING
-    p = params.eagle_base(prfm_disc.IC_NAME, T_END_MYR * MYR_INTERNAL, ctx.data_dir,
+    p = params.eagle_base(IC_NAME, T_END_MYR * MYR_INTERNAL, ctx.data_dir,
                           10.0 * MYR_INTERNAL, dt_max=1e-2,
                           cooling=params.PRFM_COOLING)
     for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
@@ -69,8 +80,11 @@ def _disc_params(ctx):
     p["Snapshots"]["compression"] = 4
     p["Gravity"].update({"max_physical_DM_softening": soft,
                          "max_physical_baryon_softening": soft})
-    p["SPH"].update({"h_min_ratio": 0.1, "h_max": 10.0, "minimal_temperature": 100.0})
-    p["Scheduler"] = {"max_top_level_cells": 16, "tasks_per_cell": 200}
+    p["SPH"].update({"h_min_ratio": 0.1, "h_max": H_MAX, "minimal_temperature": 100.0})
+    if CGM:
+        p["Stars"]["h_max"] = H_MAX
+        p["EAGLEChemistry"]["init_abundance_metal"] = -1
+    p["Scheduler"] = {"max_top_level_cells": TOP_LEVEL_CELLS, "tasks_per_cell": 200}
     p["HernquistPotential"] = {
         "useabspos": 0, "position": [0.0, 0.0, 0.0], "idealizeddisk": 1,
         "M200": 137.0, "h": 0.704, "concentration": 9.0, "diskfraction": 0.040,
@@ -142,4 +156,48 @@ def analyze(ctx):
         "median_d_rec_threshold_kpc": float(np.median(d_thr) / units.KPC) if rec.any() else 0,
         "z_launch_kpc_median": float(np.median(z_launch)) if launched.any() else 0,
         "log_tail": tail})
+    checks += _tracer(ctx, last)
     return checks
+
+
+def _tracer(ctx, snap):
+    """Energy tracer at the last snapshot: the identity gas + in flight +
+    stars = launched against the log line at the snapshot time, and the
+    fraction of the launched energy held by gas beyond 0.1 R200."""
+    import h5py
+    rows = wind_common.wind_totals(ctx.path("wind.log"))
+    row = min(rows, key=lambda r: abs(r["t"] - snap.time))
+    with h5py.File(snap.path, "r") as f:
+        centre = 0.5 * np.ravel(f["Header"].attrs["BoxSize"])[:3]
+    x = snap.read(0, "Coordinates", cgs=False) - centre
+    r = np.sqrt((x ** 2).sum(axis=1))
+    m = snap.read(0, "Masses", cgs=False).astype(np.float64)
+    dec = snap.read(0, "WindDecoupled", cgs=False) > 0
+    e0 = (snap.read(0, "WindLaunchKineticEnergies", cgs=False).astype(np.float64)
+          + snap.read(0, "WindLaunchInternalEnergies", cgs=False))
+    E_tr = snap.read(0, "WindTracerEnergies", cgs=False).astype(np.float64)
+    E_pot = snap.read(0, "WindTracerPotentialEnergies", cgs=False).astype(np.float64)
+    E_tl = snap.read(0, "WindTracerLaunchEnergies", cgs=False).astype(np.float64)
+    E_launch = row["E_kin_launch"] + row["E_th_launch"]
+    flight = np.sum(m[dec] * e0[dec])
+    total = E_tl.sum() + flight + row["E_launch_tracer_star"]
+    out = r > 0.1 * R200_KPC
+    edges = np.array([0, 2, 5, 10, 0.1 * R200_KPC, 50, 0.25 * R200_KPC, 100, 1e4])
+    idx = np.digitize(r, edges) - 1
+    shells = [float(E_tr[idx == i].sum() / E_launch) for i in range(len(edges) - 1)]
+    ctx.info.update({
+        "tracer_log_dt_Myr": float(abs(row["t"] - snap.time) / MYR_INTERNAL),
+        "E_launched": E_launch, "E_in_flight_over_launched": flight / E_launch,
+        "E_gas_tracer_over_launched": float(E_tr.sum() / E_launch),
+        "E_gas_tracer_pot_over_launched": float(E_pot.sum() / E_launch),
+        "E_stars_tracer_over_launched": row["E_tracer_star"] / E_launch,
+        "f_E_beyond_0.1R200": float(E_tr[out].sum() / E_launch),
+        "f_Epot_beyond_0.1R200": float(E_pot[out].sum() / E_launch),
+        "f_M_beyond_0.1R200": float(snap.read(0, "WindTracerMasses", cgs=False)[out].sum()
+                                    / row["m_launch"]),
+        "shell_edges_kpc": edges.tolist(), "shell_E_over_launched": shells})
+    return [Check("tracer: |gas + flight + stars - launched| / launched",
+                  abs(total - E_launch) / E_launch, 1e-5, kind="max",
+                  source="exact identity at the snapshot time (log line within "
+                         f"{abs(row['t'] - snap.time) / MYR_INTERNAL:.3g} Myr); "
+                         "float fields")]

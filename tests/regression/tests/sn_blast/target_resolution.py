@@ -42,11 +42,16 @@ from . import _common as c
 
 DESCRIPTION = "one m6 star particle (2.2e4 SNe) through each scheme at n_H = 0.1, 1, 10"
 TIER = "long"
+# Hydro scheme from SWIFT_REG_HYDRO (default SPHENIX), as in single_sn_cooling.
+HYDRO = os.environ.get("SWIFT_REG_HYDRO", "sphenix")
 BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-tracers=EAGLE",
                  "--with-entropy-floor=EAGLE", "--with-stars=EAGLE",
                  "--with-star-formation=EAGLE", "--with-black-holes=EAGLE",
                  "--with-ext-potential=constant", "--with-number-of-SNII-rays=8",
-                 "--with-feedback=EAGLE-thermal-kinetic"]}
+                 "--with-feedback=EAGLE-thermal-kinetic"]
+                + ([] if HYDRO == "sphenix" else
+                   [f"--with-hydro={HYDRO}"]
+                   + (["--with-riemann-solver=hllc"] if HYDRO.startswith("gizmo") else []))}
 
 N = 32
 M_GAS = 1.84e6  # Msun

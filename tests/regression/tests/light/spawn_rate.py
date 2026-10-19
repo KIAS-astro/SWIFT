@@ -64,11 +64,16 @@ U_STAR = 1e51 / (95.5 * units.SOLAR_MASS)  # erg / g
 
 
 def run(ctx):
+    ctx.swift(layer_params(ctx, FRACTION), FLAGS, name="light", timeout=1800)
+
+
+def layer_params(ctx, fraction):
+    """ICs and parameters of the light-wind layer run for fraction of t_dep."""
     ctx.table("photometry")
     ctx.table(params.PRFM_COOLING_TABLE)
     Sigma = slab.write_layer(ctx.path("ics.hdf5"), SIGMA)
     t_dep = slab.t_dep_layer(Sigma) / units.UNIT_TIME
-    t_end = FRACTION * t_dep
+    t_end = fraction * t_dep
     p = params.eagle_base("ics.hdf5", t_end, ctx.data_dir, t_end,
                           dt_max=slab.DT_MAX * t_dep, cooling=params.PRFM_COOLING)
     for sec in ("EAGLEStarFormation", "EAGLEEntropyFloor", "EAGLEFeedback"):
@@ -92,7 +97,7 @@ def run(ctx):
     ctx.info.update({"t_dep_Myr": t_dep * units.UNIT_TIME / units.MYR,
                      "t_end_Myr": t_end * units.UNIT_TIME / units.MYR,
                      "m_g_Msun": m_g, "dt_rebuild_Myr": dt_rebuild_Myr})
-    ctx.swift(p, FLAGS, name="light", timeout=1800)
+    return p
 
 
 def _gas_mass_Msun(ic):

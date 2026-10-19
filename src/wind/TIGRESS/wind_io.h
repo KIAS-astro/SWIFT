@@ -105,7 +105,7 @@ INLINE static int wind_write_particles(const struct part *parts,
   list[12] = io_make_output_field(
       "WindRecouplingReasons", CHAR, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
       wind_data.recouple_reason,
-      "Why the particle last recoupled: 0 never, 1 distance, 2 time, 3 "
+      "Why the particle last recoupled: 0 never, 1 distance, 3 time, 4 "
       "pressure balance");
   list[13] = io_make_output_field(
       "WindRecouplingWindPressures", FLOAT, 1, UNIT_CONV_PRESSURE, 0.f, parts,

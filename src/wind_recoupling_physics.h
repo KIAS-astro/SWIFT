@@ -200,13 +200,14 @@ enum wind_recoupling_mode {
 };
 
 /**
- * @brief Why a particle recoupled (0: it did not).
+ * @brief Why a particle recoupled (0: it did not). The values follow the
+ * density recoupling of branch arkenstone-tests, where 2 is density.
  */
 enum wind_recoupling_reason {
   wind_reason_none = 0,
   wind_reason_distance = 1,
-  wind_reason_time = 2,
-  wind_reason_pressure = 3
+  wind_reason_time = 3,
+  wind_reason_pressure = 4
 };
 
 /**

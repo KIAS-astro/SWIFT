@@ -25,7 +25,7 @@ tests/wind/_cc85.py (independent of the C code), with P_0 the IC pressure
 (gamma - 1) rho u: r_eq = 1.4-4.0 kpc.
 
 Checks:
-  1. all 64 recoupled, all by pressure (reason 3);
+  1. all 64 recoupled, all by pressure (reason 4);
   2. per particle, recoupling distance - r_eq between -0.005 kpc (the
      launch offset from the centre) and the travel in one step plus the
      offset, v dt_max + 0.005 kpc = 0.0101 kpc;
@@ -151,7 +151,7 @@ def analyze(ctx):
     r_eq_p = np.repeat(r_eq, N_PER)
     step = V0 * DT_MAX * _common.MYR
 
-    checks.append(Check("recoupled by pressure", int((reason == 3).sum()), k,
+    checks.append(Check("recoupled by pressure", int((reason == 4).sum()), k,
                         kind="equal", source="P_CC85 falls to P_0 before d_max and t_rec"))
     dd = d - r_eq_p
     checks.append(Check("min (d - r_eq) [kpc]", dd.min(), -OFFSET - 1e-4, kind="min",

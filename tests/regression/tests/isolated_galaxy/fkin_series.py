@@ -41,9 +41,12 @@ BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-trace
 # own cluster job: SWIFT_REG_ISOGAL_RES = M6 (default, 8e5 Msun, softening 0.4 kpc)
 # or M5 (1e5 Msun, 0.2 kpc), or H12_m3e6 / H12_m3e7 (M6_disk subsampled to 3.2e6 and
 # 2.6e7 Msun by swift-ism-model tests/isolated_galaxy/make_ics.py; 0.8 and
-# 1.7 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names.
+# 1.7 kpc), or H12_m1.6e6 / H12_m1.3e7, the two reference resolutions (HR5/8 and
+# HR5, Lee et al. 2021: baryon mass 1.6e6 and 1.3e7 Msun; 0.5 and 1.0 kpc, HR5 has
+# 1 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names.
 RES = os.environ.get("SWIFT_REG_ISOGAL_RES", "M6")
-SOFTENING = {"M5": 0.2, "M6": 0.4, "H12_m3e6": 0.8, "H12_m3e7": 1.7}[RES]
+SOFTENING = {"M5": 0.2, "M6": 0.4, "H12_m3e6": 0.8, "H12_m3e7": 1.7,
+             "H12_m1.6e6": 0.5, "H12_m1.3e7": 1.0}[RES]
 IC_NAME = f"{RES}_disk.hdf5"
 IC_URL = ("https://virgodb.cosma.dur.ac.uk/swift-webstorage/ICs/IsolatedGalaxies_COLIBRE/"
           + IC_NAME)

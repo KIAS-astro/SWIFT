@@ -26,7 +26,9 @@ from .fkin_series import BUILDS, ic_file  # noqa: F401
 DESCRIPTION = "H12 disc ICs (8e5, 3.2e6, 2.6e7 Msun) stay in equilibrium for 0.5 Gyr"
 TIER = "long"
 RUNS = {"m8e5": ("M6_disk.hdf5", 0.4), "m3e6": ("H12_m3e6_disk.hdf5", 0.8),
-        "m3e7": ("H12_m3e7_disk.hdf5", 1.7)}
+        "m3e7": ("H12_m3e7_disk.hdf5", 1.7),
+        # the two reference resolutions: HR5/8 and HR5 (Lee et al. 2021)
+        "m1.6e6": ("H12_m1.6e6_disk.hdf5", 0.5), "m1.3e7": ("H12_m1.3e7_disk.hdf5", 1.0)}
 T_END = 0.5113  # 500 Myr in internal units (1 unit = 977.8 Myr)
 DT_SNAP = 0.05113
 ANNULI = ((2.0, 4.0), (4.0, 6.0), (6.0, 10.0))

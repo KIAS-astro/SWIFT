@@ -1125,6 +1125,13 @@ __attribute__((always_inline)) INLINE static void hydro_kick_extra(
 
   /* Integrate the internal energy forward in time */
   const float delta_u = p->u_dt * dt_therm;
+#ifdef SWIFT_TRACE_HOT
+  if (xp->u_full > SWIFT_TRACE_HOT)
+    message("TRACE kick id=%lld bin=%d dt=%.4e m=%.6e u=%.6e du=%.6e rho=%.6e "
+            "h=%.6e P=%.6e",
+            p->id, p->time_bin, dt_therm, p->mass, xp->u_full, delta_u, p->rho,
+            p->h, p->force.pressure);
+#endif
 
   /* Do not decrease the energy by more than a factor of 2*/
   xp->u_full = max(xp->u_full + delta_u, 0.5f * xp->u_full);

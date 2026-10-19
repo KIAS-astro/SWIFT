@@ -577,6 +577,10 @@ runner_iact_nonsym_feedback_apply(
 
       /* Impose maximal viscosity */
       hydro_diffusive_feedback_reset(pj);
+#ifdef SWIFT_TRACE_HOT
+      message("TRACE inject id=%lld u_init=%.6e u_new=%.6e", pj->id, u_init,
+              u_new);
+#endif
 
       /* Mark this particle has having been heated by supernova feedback */
       tracers_after_supernovae_feedback_part(xpj, /*delta_p_magnitude=*/0.f,

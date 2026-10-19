@@ -651,6 +651,14 @@ __attribute__((always_inline)) INLINE static void hydro_kick_extra(
   if (p->flux.dt > 0.0f) {
     float flux[5];
     hydro_part_get_fluxes(p, flux);
+#ifdef SWIFT_TRACE_HOT
+    if (p->conserved.energy > SWIFT_TRACE_HOT * p->conserved.mass)
+      message("TRACE kick id=%lld bin=%d dt=%.4e m=%.6e E=%.6e dE_flux=%.6e "
+              "u=%.6e rho=%.6e h=%.6e P=%.6e",
+              p->id, p->time_bin, dt_therm, p->conserved.mass,
+              p->conserved.energy, flux[4],
+              p->conserved.energy / p->conserved.mass, p->rho, p->h, p->P);
+#endif
 
     /* Update conserved variables. */
     p->conserved.mass += hydro_gizmo_mfv_mass_update_term(flux[0], dt_therm);

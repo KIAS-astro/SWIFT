@@ -528,6 +528,14 @@ void cooling_cool_part(const struct phys_const *phys_const,
   /* Store the radiated energy */
   xp->cooling_data.radiated_energy -=
       hydro_get_mass(p) * (cooling_du_dt - hydro_du_dt) * dt;
+
+#ifdef SWIFT_TRACE_HOT
+  if (u_start > SWIFT_TRACE_HOT)
+    message("TRACE cool id=%lld t=%.6e dt=%.4e dt_therm=%.4e u_start=%.6e "
+            "hydro_du=%.6e u_0=%.6e u_final=%.6e n_H=%.4e",
+            p->id, time, dt, dt_therm, u_start, hydro_du_dt * dt_therm, u_0,
+            u_final, n_H_cgs);
+#endif
 }
 
 /**

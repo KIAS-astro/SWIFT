@@ -355,6 +355,18 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
   const double m = mw + mh;
   const double uw = hydro_get_physical_internal_energy(p, xp, cosmo);
   const double uh = hydro_get_physical_internal_energy(h, hx, cosmo);
+  {
+    static long long n_merge = 0, n_lag = 0, n_active = 0;
+    n_merge++;
+    if (hc->hydro.ti_old_part != e->ti_current) n_lag++;
+    if (h->time_bin <= e->max_active_bin) n_active++;
+    if (n_merge % 200 == 0)
+      message("DEBUG merges %lld: host cell not drifted to now %lld, host active %lld",
+              n_merge, n_lag, n_active);
+    if (!(uw > 0. && uh > 0. && isfinite(uw) && isfinite(uh)) || h->h <= 0.f)
+      message("DEBUG bad merge: wind %lld u %g host %lld u %g h %g bin %d", p->id,
+              uw, h->id, uh, h->h, h->time_bin);
+  }
 
   double v[3], ekw = 0., ekh = 0., ek = 0., dv2 = 0.;
   for (int k = 0; k < 3; k++) {
@@ -446,6 +458,23 @@ void wind_engine_pass(struct engine *e) {
     error("Wind: recoupling_deposit host needs the time-step sync (--sync)");
 
   struct space *s = e->s;
+  for (size_t k = 0; k < s->nr_parts; k++) {
+    const struct part *p = &s->parts[k];
+    const struct xpart *xp = &s->xparts[k];
+    if (p->time_bin == time_bin_inhibited ||
+        p->time_bin == time_bin_not_created)
+      continue;
+    if (!isfinite(p->x[0] + p->x[1] + p->x[2]) ||
+        !isfinite(xp->v_full[0] + xp->v_full[1] + xp->v_full[2]) ||
+        !isfinite(xp->u_full) || !isfinite(p->h) || p->h <= 0.f ||
+        !isfinite(p->rho))
+      error(
+          "DEBUG non-finite part %lld step %d: x %g %g %g v %g %g %g u %g h %g "
+          "rho %g m %g bin %d dec %d launches %d",
+          p->id, e->step, p->x[0], p->x[1], p->x[2], xp->v_full[0],
+          xp->v_full[1], xp->v_full[2], xp->u_full, p->h, p->rho, p->mass,
+          p->time_bin, p->wind_data.decoupled, p->wind_data.launch_count);
+  }
   for (size_t k = 0; k < s->nr_parts; k++) {
     struct part *p = &s->parts[k];
     struct xpart *xp = &s->xparts[k];

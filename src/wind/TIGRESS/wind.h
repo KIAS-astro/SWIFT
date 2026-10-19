@@ -186,8 +186,8 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
 
   double eta_M, eta_E, dv, u_w;
   wind_loadings(props, xp, &eta_M, &eta_E);
-  wind_launch_kinematics(props->u_star, eta_M, eta_E, props->f_kin, &dv,
-                         &u_w);
+  wind_launch_kinematics(props->u_star, eta_M, eta_E, props->f_kin,
+                         props->energy_convention, hydro_gamma, &dv, &u_w);
 
   const double sign =
       random_unit_interval(p->id, ti_current, random_number_wind_direction) <

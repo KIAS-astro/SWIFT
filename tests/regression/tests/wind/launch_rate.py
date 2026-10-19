@@ -3,9 +3,11 @@
 The star-forming layer of star_formation/prfm_slab (1 x 1 x 0.5 kpc periodic
 box, Sigma_g = 200 Msun/pc^2, every particle star-forming at
 mdot_* = m_g / t_dep) with the decoupled wind on at constant loadings
-eta_M = 0.5, eta_E = 0.1 (Wind:loading_model = constant). Each step one
-uniform number decides star (u < p_*), wind (p_* <= u < p_* + p_w,
-p_w = eta_M p_*) or nothing (wind-design.md WD1). Recoupling is pushed beyond
+eta_M = 0.5, eta_E = 0.1 (Wind:loading_model = constant, whose default
+Wind:energy_convention = internal counts kinetic + internal energy in eta_E).
+Each step one uniform number decides star (u < p_*), wind
+(p_* <= u < p_* + p_w, p_w = eta_M p_*) or nothing (wind-design.md WD1).
+Recoupling is pushed beyond
 the run (d_rec = 1e3 kpc, t_rec = 1e4 Myr), so every launched particle is
 still decoupled at the end and, with no gravity (constant zero field) and
 no hydro force, still moves with its launch velocity.

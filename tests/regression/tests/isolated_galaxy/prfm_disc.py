@@ -27,6 +27,12 @@ Runs (SWIFT_REG_PRFM_RUNS, comma-separated; default all):
             EAGLEChemistry init_abundance_* metal entry scaled by the same
             factor, and H and He raised in proportion so that the mass
             fractions still sum to 1
+  ok22_kc        OK22 with Sigma_g from the kernel column rho_SPH H_k / 1.4
+                 (surface_density_estimator = kernel_column), uncorrected;
+                 Sigma_*, sigma_*z from the map as in ok22
+  ok22_kc_const  the same divided by 0.65 (kernel_column_correction = constant)
+  ok22_kc_eq     the same corrected for the equilibrium thickness
+                 (kernel_column_correction = equilibrium)
 Resolution: SWIFT_REG_ISOGAL_RES = H12_m1.6e6 (default) or H12_m1.3e7.
 Length: SWIFT_REG_PRFM_TEND_MYR (default 1000), snapshots every 10 Myr.
 SPH h_max: SWIFT_REG_ISOGAL_HMAX [kpc] (default 10); particles in outflows
@@ -73,6 +79,14 @@ ALL_RUNS = {
     "ok22_eq": ({"calibration": "OK22", "threshold": "equilibrium"}, "OK22", None),
     "k24": ({"calibration": "K24", "threshold": "measured"}, "K24", None),
     "k24_lowz": ({"calibration": "K24", "threshold": "measured"}, "K24", 0.1),
+    "ok22_kc": ({"calibration": "OK22", "threshold": "measured",
+                 "surface_density_estimator": "kernel_column"}, "OK22", None),
+    "ok22_kc_const": ({"calibration": "OK22", "threshold": "measured",
+                       "surface_density_estimator": "kernel_column",
+                       "kernel_column_correction": "constant"}, "OK22", None),
+    "ok22_kc_eq": ({"calibration": "OK22", "threshold": "measured",
+                    "surface_density_estimator": "kernel_column",
+                    "kernel_column_correction": "equilibrium"}, "OK22", None),
 }
 _only = os.environ.get("SWIFT_REG_PRFM_RUNS")
 RUNS = {k: v for k, v in ALL_RUNS.items() if not _only or k in _only.split(",")}

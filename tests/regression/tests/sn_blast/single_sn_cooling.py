@@ -31,6 +31,8 @@ background against KO15's cooling, and an ambient pressure about twice KO15's):
     note, ai-notes sn-experiments.md).
 """
 
+import os
+
 import numpy as np
 
 from swiftreg import params, units
@@ -41,7 +43,11 @@ from . import _common as c
 
 DESCRIPTION = "single SN with EAGLE cooling: shell formation and momentum against KO15"
 TIER = "long"
-BUILDS = {"eagle": ["--with-subgrid=EAGLE"]}
+# Hydro scheme from SWIFT_REG_HYDRO (default SPHENIX), to compare how schemes treat the
+# hot interior (mixing across the contact discontinuity).
+HYDRO = os.environ.get("SWIFT_REG_HYDRO", "sphenix")
+BUILDS = {"eagle": ["--with-subgrid=EAGLE"] + ([] if HYDRO == "sphenix" else
+                                                [f"--with-hydro={HYDRO}"])}
 
 N = 64
 BOX = 0.128  # kpc
@@ -66,6 +72,11 @@ def run(ctx):
     p["Snapshots"]["compression"] = 4
     p["EAGLEEntropyFloor"].update({"Jeans_temperature_norm_K": 10.0,
                                    "Cool_temperature_norm_K": 10.0})
+    if os.environ.get("SWIFT_REG_SNR_OUTPUTS") == "dense":
+        # 150 outputs log-spaced from 1 kyr to the end, for movies
+        times = np.logspace(np.log10(1.0226e-6), np.log10(T_END), 150)
+        np.savetxt(ctx.path("output_list.txt"), times, header="Time", comments="# ")
+        p["Snapshots"].update({"output_list_on": 1, "output_list": "output_list.txt"})
     ctx.swift(p, ["--hydro", "--cooling", "--limiter"], timeout=4 * 3600)
 
 

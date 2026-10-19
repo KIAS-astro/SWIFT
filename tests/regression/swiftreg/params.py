@@ -91,6 +91,10 @@ def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
             "recording_triggers_bpart": [-1, -1],
         },
         "Statistics": {"delta_time": float(snapshot_dt), "time_first": 0.0},
+        # Few top-level cells: test boxes are small, smoothing lengths grow
+        # when gas converts or is heated, and SWIFT cannot reduce the number
+        # of top-level cells during a run.
+        "Scheduler": {"max_top_level_cells": 8, "tasks_per_cell": 200},
         "InitialConditions": {
             "file_name": ic_file,
             "periodic": 1,

@@ -32,9 +32,8 @@ def sf_params(ctx, time_end, snapshot_dt):
         "ics.hdf5", time_end, ctx.data_dir, snapshot_dt, dt_max=1e-2
     )
     base["ConstantPotential"] = {"g_cgs": [0.0, 0.0, 0.0]}
-    # As gas converts, smoothing lengths grow; SWIFT cannot reduce the number
-    # of top-level cells during a run, so start with few and cap h.
-    base["Scheduler"] = {"max_top_level_cells": 8}
+    # As gas converts, smoothing lengths grow; cap h (see also Scheduler in
+    # params.eagle_base).
     base["SPH"]["h_max"] = 2.0 * 1.2348 * BOX / N
     # Stars need the photometry tables, and --temperature the cooling tables,
     # at start-up even without feedback or cooling.

@@ -1,7 +1,7 @@
 """Equilibrium of the H12 isolated disc ICs without cooling, star formation or feedback.
 
 The ICs (M6_disk of Nobels et al. 2024, and copies subsampled by 4 and 32 to particle
-masses of 3.2e6 and 2.6e7 Msun by swift-feedback-method tests/isolated_galaxy/
+masses of 3.2e6 and 2.6e7 Msun by swift-ism-model tests/isolated_galaxy/
 make_ics.py) are evolved for 0.5 Gyr with hydrodynamics, self-gravity and the analytic
 Hernquist halo only. A disc that starts in equilibrium keeps its profiles. Softening
 0.4, 0.8 and 1.7 kpc (ai-notes isolated-galaxy-ics.md Sec. on softening).

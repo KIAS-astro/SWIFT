@@ -17,7 +17,7 @@ at f_kin = 0.1. 1 Gyr, snapshots every 10 Myr.
 
 Recorded: star formation rate history (from star birth times), and the snapshots for
 maps, profiles, the Kennicutt-Schmidt relation and outflow rates (analysed in
-swift-feedback-method). Check: each run reached 1 Gyr.
+swift-ism-model). Check: each run reached 1 Gyr.
 """
 
 import os
@@ -39,9 +39,11 @@ BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-trace
 
 # Resolution and run subset from the environment, so that each run can be its
 # own cluster job: SWIFT_REG_ISOGAL_RES = M6 (default, 8e5 Msun, softening 0.4 kpc)
-# or M5 (1e5 Msun, 0.2 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names.
+# or M5 (1e5 Msun, 0.2 kpc), or H12_m3e6 / H12_m3e7 (M6_disk subsampled to 3.2e6 and
+# 2.6e7 Msun by swift-ism-model tests/isolated_galaxy/make_ics.py; 0.8 and
+# 1.7 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names.
 RES = os.environ.get("SWIFT_REG_ISOGAL_RES", "M6")
-SOFTENING = {"M5": 0.2, "M6": 0.4}[RES]
+SOFTENING = {"M5": 0.2, "M6": 0.4, "H12_m3e6": 0.8, "H12_m3e7": 1.7}[RES]
 IC_NAME = f"{RES}_disk.hdf5"
 IC_URL = ("https://virgodb.cosma.dur.ac.uk/swift-webstorage/ICs/IsolatedGalaxies_COLIBRE/"
           + IC_NAME)

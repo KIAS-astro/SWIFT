@@ -75,6 +75,20 @@ __attribute__((always_inline)) INLINE static void hydro_velocities_end_force(
 }
 
 /**
+ * @brief Move velocity changes made outside the hydro scheme into the momentum.
+ *
+ * Not done for MFV, whose particle velocity differs from the fluid velocity.
+ *
+ * @param p The particle to act upon.
+ * @param xp The extended particle data to act upon.
+ * @param dv_kick Velocity change applied by kick_part() before this call.
+ */
+__attribute__((always_inline)) INLINE static void
+hydro_velocities_absorb_external_kick(struct part *restrict p,
+                                      const struct xpart *restrict xp,
+                                      const float *dv_kick) {}
+
+/**
  * @brief Set the velocity of a GIZMO particle, based on the values of its
  * primitive variables and the geometry of its mesh-free "cell".
  *

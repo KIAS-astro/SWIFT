@@ -473,10 +473,11 @@ void engine_light_spawn(struct engine *e) {
   /* Central source, on rank 0: the mass injected since the last rebuild */
   long long n_source = 0;
   size_t i_template = nr_parts_old;
-  if (props->source_Mdot > 0. && e->nodeID == 0 &&
-      props->light_last_rebuild > -FLT_MAX) {
-    props->source_m_carry +=
-        props->source_Mdot * (time - props->light_last_rebuild);
+  if (props->source_Mdot > 0. && e->nodeID == 0) {
+    const double t_prev = props->light_last_rebuild > -FLT_MAX
+                              ? props->light_last_rebuild
+                              : e->time_begin;
+    props->source_m_carry += props->source_Mdot * (time - t_prev);
     n_source = (long long)floor(props->source_m_carry / m_l);
     for (size_t i = 0; i < nr_parts_old && n_source > 0; i++) {
       const struct part *p = &s->parts[i];

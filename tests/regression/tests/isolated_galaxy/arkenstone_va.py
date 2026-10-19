@@ -31,16 +31,20 @@ Checks (each run reached its end time; then, where the runs exist):
      equal to tens of per cent; our ISM model and resolution differ from theirs, and
      the inflow measured on 10 Myr snapshots of a few hundred particles per shell
      scatters by tens of per cent, so only the factor is tested.
-  2. highspec: eta_E at 0.1, 0.2 and 0.5 r200 over 0.2-1 Gyr, as time-averaged outflow
-     energy rate over time-averaged u_* SFR, lies within a factor 3 of the input 0.9.
-     S24a Fig. 6 shows 0.5-0.9 at all radii, with the enthalpy flux of eq. 10 (a Mach-1
-     launch carries 1.43 times the input energy in that definition); a factor 3 allows
-     for both. The time average is tested, not the median of the snapshot series: with
-     whole-particle launches the energy arrives in quanta, and the median of 10 Myr
-     samples measures how often a quantum is in the shell (at 1.6e6 Msun: median 0.005,
-     time average 1.0 at 0.1 r200). Medians are recorded.
-  3. highspec: time-averaged eta_M at 0.1 r200 over 0.2-1 Gyr above the input 0.32
-     (S24a: about five times the input, from swept-up CGM).
+  2. highspec, smoke test: eta_E at 0.1, 0.2 and 0.5 r200 over 0.2 Gyr to the end (the
+     span of S24a Fig. 6), as time-averaged outflow energy rate over time-averaged u_*
+     SFR, lies between 0.3 and 2.7. The band spans a factor 9: it catches a wind that
+     loses its energy or a unit error, but cannot tell S24a (about 0.6), our runs (about
+     0.95) and a lossless Mach-1 wind (1.29 in the enthalpy flux of S24a eq. 10) apart.
+     This definition replaced the median of the 10 Myr snapshot series after the first
+     evaluation (grammar jobs 1198647-1198651), in which the median failed at 0.1 r200
+     (0.057 at 2e5 Msun, 0.008 at 1.6e6 Msun). The flux through a surface is a time-
+     integrated quantity. S24a's flux is quasi-continuous, so their median and mean
+     agree; our whole particles cross a 0.1 r0 shell in under 1 Myr and are sampled
+     every 10 Myr, so the median measures how often a particle is in the shell. The
+     medians are recorded as the intermittency measurement.
+  3. highspec: time-averaged eta_M at 0.1 r200 over the same window above the input
+     0.32 (S24a: about six times the input, from swept-up CGM).
   4. highspec: mean inflow through 0.2 r200 over 0.5 Gyr to the end below the nowind
      run's (S24a: inflow suppressed at all radii).
   5. lowspec: mean SFR over 0.2-0.7 Gyr below the nowind run's (S24a Fig. 4).
@@ -218,7 +222,7 @@ def analyze(ctx):
                                 kind="max", source="as above"))
     if "highspec" in data:
         d = data["highspec"]
-        w = window(d, 200.0, 1000.0)
+        w = window(d, 200.0)
         ok = w & (d["sfr"] > 0)
         sfr = d["sfr"][w].mean() if w.any() else np.nan
         medians = {}
@@ -226,14 +230,14 @@ def analyze(ctx):
             eta_E = d[f"eout_{f}"][w].mean() / (U_STAR * sfr * units.SOLAR_MASS)
             medians[f"eta_E_{f}"] = float(np.median(
                 d[f"eout_{f}"][ok] / (U_STAR * d["sfr"][ok] * units.SOLAR_MASS)))
-            checks.append(Check(f"highspec: eta_E at {f} r200 (0.2-1 Gyr) >= 0.3", eta_E,
-                                0.3, kind="min", source="input 0.9 / 3 (S24a Fig. 6)"))
-            checks.append(Check(f"highspec: eta_E at {f} r200 (0.2-1 Gyr) <= 2.7", eta_E,
-                                2.7, kind="max", source="input 0.9 x 3"))
-        checks.append(Check("highspec: eta_M at 0.1 r200 (0.2-1 Gyr) > input 0.32",
+            checks.append(Check(f"highspec: time-avg eta_E at {f} r200 >= 0.3 (smoke)",
+                                eta_E, 0.3, kind="min", source="docstring check 2"))
+            checks.append(Check(f"highspec: time-avg eta_E at {f} r200 <= 2.7 (smoke)",
+                                eta_E, 2.7, kind="max", source="docstring check 2"))
+        checks.append(Check("highspec: time-avg eta_M at 0.1 r200 > input 0.32",
                             d["mout_0.1"][w].mean() / sfr, 0.32, kind="min",
-                            source="S24a Fig. 6: ~5x input"))
-        ctx.info["highspec_snapshot_medians_0.2-1Gyr"] = medians
+                            source="S24a Fig. 6: ~6x input"))
+        ctx.info["highspec_snapshot_median_eta_E"] = medians
         if "nowind" in data:
             n = data["nowind"]
             wh, wn = window(d, 500.0), window(n, 500.0)

@@ -60,6 +60,15 @@ ALL_RUNS = {
     "fkin0.1": {"SNII_f_kinetic": 0.1},
     "fkin1": {"SNII_f_kinetic": 1.0},
     "colibre": dict(COLIBRE_M6, SNII_f_kinetic=0.1),
+    # Referee control (ai-notes referee-ism-model-notes.md, Blocking 1): stochastic heating
+    # set to the TIGRESS hot loadings, eta_M,hot = 0.2 and eta_E,hot = 0.1 per 1e51 erg per
+    # 95.5 Msun: f_E = 0.1 / (0.0118 x 95.5) = 0.089 and Delta T from
+    # eta_M = 0.91 f_E (Delta T / 10^7.5 K)^-1 -> Delta T = 10^7.11 K.
+    "tigress_heat": {"SNII_f_kinetic": 0.0, "SNII_delta_T_K": 10 ** 7.11,
+                     "SNII_energy_fraction_min": 0.089, "SNII_energy_fraction_max": 0.089},
+    # baseline without supernova energy (SNIa feedback off as well)
+    "nofb": {"SNII_energy_fraction_min": 0.0, "SNII_energy_fraction_max": 0.0,
+             "use_SNIa_feedback": 0},
 }
 _only = os.environ.get("SWIFT_REG_ISOGAL_RUNS")
 RUNS = {k: v for k, v in ALL_RUNS.items() if not _only or k in _only.split(",")}

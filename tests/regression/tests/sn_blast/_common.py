@@ -13,10 +13,11 @@ E_SN = 1e51  # erg
 N_INJECT = 32  # the 8 + 24 lattice sites nearest the centre of an even lattice
 
 
-def blast_ics(path, n, box_kpc, nH, T, glass_file=None):
+def blast_ics(path, n, box_kpc, nH, T, glass_file=None, glass_tile=1):
     """Write the ICs; return (gas mass in g, background density in g/cm^3).
     With glass_file the particles sit on that glass instead of a lattice."""
-    gas, _ = ics.uniform_gas(n, box_kpc, nH, T, glass_file=glass_file)
+    gas, _ = ics.uniform_gas(n, box_kpc, nH, T, glass_file=glass_file,
+                             glass_tile=glass_tile)
     r = np.linalg.norm(gas["Coordinates"] - 0.5 * box_kpc, axis=1)
     inject = np.argsort(r, kind="stable")[:N_INJECT]
     m = gas["Masses"][0]

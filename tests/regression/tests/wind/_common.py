@@ -50,5 +50,6 @@ def wind_tail(log_path):
     import re
     nums = re.findall(r"=\s*([-+0-9.eE]+)", last)
     keys = ["t", "n_launch", "m_launch", "E_kin_launch", "E_th_launch",
-            "n_recouple", "m_recouple", "E_kin_recouple", "E_th_recouple"]
+            "n_recouple", "m_recouple", "E_kin_recouple", "E_th_recouple",
+            "E_launch", "E_bernoulli_launch"]
     return dict(zip(keys, map(float, nums)))

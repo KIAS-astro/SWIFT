@@ -847,6 +847,19 @@ GEARStellarWind:
   interpolation_size_mass:        200       # Number of elements to keep in the mass interpolation of the data. (Default: 200).
   interpolation_size_metallicity: 110       # Number of elements to keep in the metallicity interpolation of the data. (Default: 110).
 
+# Decoupled galactic wind launched from PRFM star formation (--with-wind=TIGRESS)
+Wind:
+  loading_model:               TIGRESS     # (Optional) TIGRESS (Kim et al. 2020b hot-phase fits against Sigma_SFR), constant or none. (Default: TIGRESS)
+  eta_M:                       0.5         # (Needed for loading_model constant) Mass loading.
+  eta_E:                       0.1         # (Needed for loading_model constant) Energy loading.
+  energy_convention:           enthalpy    # (Optional) What eta_E counts at launch: enthalpy (Delta v^2/2 + gamma u_w = eta_E u_* / eta_M, Kim et al. 2020b) or internal (Delta v^2/2 + u_w = eta_E u_* / eta_M, Arkenstone). (Default: enthalpy for loading_model TIGRESS, internal otherwise)
+  kinetic_fraction:            0.25        # (Optional) (Delta v^2/2) / (eta_E u_* / eta_M). (Default: the Mach-1 value, 1/4 for enthalpy and 5/14 for internal at gamma = 5/3)
+  launch_direction:            [0, 0, 1]   # (Optional) Disc normal; the kick is along +- this vector. (Default: [0, 0, 1])
+  recoupling_distance_kpc:     2.          # (Optional) Minimum recoupling distance in kpc. (Default: 2)
+  recoupling_kernel_factor:    2.          # (Optional) The recoupling distance is at least this many kernel supports at launch. (Default: 2)
+  recoupling_time_Myr:         25.         # (Optional) Recoupling time in Myr. (Default: 25)
+  max_timestep_Myr:            1.          # (Optional) Time-step cap while decoupled in Myr. (Default: 1)
+
 # AGORA feedback model
 AGORAFeedback:
   energy_in_erg_per_CCSN: 1e51

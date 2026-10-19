@@ -47,7 +47,9 @@ TIER = "long"
 # hot interior (mixing across the contact discontinuity).
 HYDRO = os.environ.get("SWIFT_REG_HYDRO", "sphenix")
 BUILDS = {"eagle": ["--with-subgrid=EAGLE"] + ([] if HYDRO == "sphenix" else
-                                                [f"--with-hydro={HYDRO}"])}
+                                                [f"--with-hydro={HYDRO}"]
+                                                + (["--with-riemann-solver=hllc"]
+                                                   if HYDRO.startswith("gizmo") else []))}
 
 N = 64
 BOX = 0.128  # kpc

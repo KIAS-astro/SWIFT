@@ -18,9 +18,13 @@
 
 /*
  * Checks src/wind_physics.h:
- *  - launch kinematics: Delta v^2 / 2 + u_w = u_* eta_E / eta_M (1e-12) and
- *    (Delta v^2 / 2) / u_w = 5/9 (1e-12), at the Milky Way TIGRESS loadings
- *    and at a constant (eta_M, eta_E) = (0.5, 0.1);
+ *  - launch kinematics, for both energy conventions, at the Milky Way
+ *    TIGRESS loadings and at a constant (eta_M, eta_E) = (0.5, 0.1):
+ *    Delta v^2 / 2 + h u_w = u_* eta_E / eta_M with h = gamma (enthalpy) or
+ *    1 (internal) (1e-12), the Mach-1 kinetic fraction (1/4 or 5/14) and
+ *    Mach number 1 (1e-12); at Sigma_SFR = 1e-2 the values of Delta v, T_w
+ *    and the Bernoulli speed v_B = (Delta v^2 + 2 gamma u_w)^1/2, which for
+ *    enthalpy equals (2 e_w)^1/2 (1e-12);
  *  - the draw: on a grid of 1e6 uniform numbers the star and wind fractions
  *    are p_* and p_w (1e-5, the grid spacing), the outcomes exclude each
  *    other by construction, and for p_* + p_w > 1 both are renormalised;
@@ -97,26 +101,61 @@ int main(int argc, char *argv[]) {
         0.05);
 
   /* Launch kinematics */
+  const double gamma = 5. / 3.;
+  check("Mach-1 kinetic fraction, enthalpy",
+        wind_kinetic_fraction_mach1(wind_energy_enthalpy, gamma), 0.25, 1e-15);
+  check("Mach-1 kinetic fraction, internal",
+        wind_kinetic_fraction_mach1(wind_energy_internal, gamma), 5. / 14.,
+        1e-15);
   const double loads[2][2] = {
       {wind_TIGRESS_eta_M(1e-2), wind_TIGRESS_eta_E(1e-2)}, {0.5, 0.1}};
-  for (int i = 0; i < 2; i++) {
-    double dv, u_w;
-    const double eM = loads[i][0], eE = loads[i][1];
-    wind_launch_kinematics(u_star, eM, eE, WIND_KINETIC_FRACTION_MACH1, &dv,
-                           &u_w);
-    char name[96];
-    sprintf(name, "(eta_M, eta_E) = (%.3g, %.3g): dv^2/2 + u_w", eM, eE);
-    check(name, 0.5 * dv * dv + u_w, u_star * eE / eM, 1e-12);
-    sprintf(name, "(eta_M, eta_E) = (%.3g, %.3g): (dv^2/2) / u_w", eM, eE);
-    check(name, 0.5 * dv * dv / u_w, 5. / 9., 1e-12);
-    sprintf(name, "(eta_M, eta_E) = (%.3g, %.3g): Mach (gamma = 5/3)", eM, eE);
-    check(name, dv / sqrt(5. / 3. * 2. / 3. * u_w), 1., 1e-12);
-    const double T_w = u_w * (2. / 3.) * 0.6 * 1.67262192e-24 / 1.380649e-16;
-    printf("     Delta v = %.1f km/s, u_w = %.4g (km/s)^2, T(mu=0.6) = %.3g K\n",
-           dv / kms, u_w / (kms * kms), T_w);
-    if (i == 0) {
-      check("Sigma_SFR = 1e-2: Delta v = 454 km/s (WD3)", dv / kms, 454., 0.01);
-      check("Sigma_SFR = 1e-2: T_w = 9.0e6 K (WD3)", T_w, 9.0e6, 0.01);
+  const enum wind_energy_convention convs[2] = {wind_energy_enthalpy,
+                                                wind_energy_internal};
+  const char *conv_names[2] = {"enthalpy", "internal"};
+  /* Expected at Sigma_SFR = 1e-2: Delta v [km/s], T_w [K], v_B [km/s] */
+  const double expect[2][3] = {{380.4, 6.31e6, 760.8}, {454.7, 9.02e6, 909.3}};
+  for (int c = 0; c < 2; c++) {
+    const enum wind_energy_convention conv = convs[c];
+    const double h = conv == wind_energy_enthalpy ? gamma : 1.;
+    const double f = wind_kinetic_fraction_mach1(conv, gamma);
+    for (int i = 0; i < 2; i++) {
+      double dv, u_w;
+      const double eM = loads[i][0], eE = loads[i][1];
+      const double e_w = u_star * eE / eM;
+      wind_launch_kinematics(u_star, eM, eE, f, conv, gamma, &dv, &u_w);
+      char name[128];
+      sprintf(name, "%s (eta_M, eta_E) = (%.3g, %.3g): dv^2/2 + h u_w",
+              conv_names[c], eM, eE);
+      check(name, 0.5 * dv * dv + h * u_w, e_w, 1e-12);
+      sprintf(name, "%s (eta_M, eta_E) = (%.3g, %.3g): (dv^2/2) / e_w",
+              conv_names[c], eM, eE);
+      check(name, 0.5 * dv * dv / e_w, f, 1e-12);
+      sprintf(name, "%s (eta_M, eta_E) = (%.3g, %.3g): Mach", conv_names[c],
+              eM, eE);
+      check(name, dv / sqrt(gamma * (gamma - 1.) * u_w), 1., 1e-12);
+      const double v_B = wind_bernoulli_speed(dv, u_w, gamma);
+      if (conv == wind_energy_enthalpy) {
+        sprintf(name, "%s (eta_M, eta_E) = (%.3g, %.3g): v_B / (2 e_w)^1/2",
+                conv_names[c], eM, eE);
+        check(name, v_B / sqrt(2. * e_w), 1., 1e-12);
+      }
+      const double T_w =
+          u_w * (gamma - 1.) * 0.6 * 1.67262192e-24 / 1.380649e-16;
+      printf(
+          "     %s: Delta v = %.1f km/s, u_w = %.4g (km/s)^2, T(mu=0.6) = "
+          "%.3g K, v_B = %.1f km/s\n",
+          conv_names[c], dv / kms, u_w / (kms * kms), T_w, v_B / kms);
+      if (i == 0) {
+        sprintf(name, "%s Sigma_SFR = 1e-2: Delta v = %.1f km/s",
+                conv_names[c], expect[c][0]);
+        check(name, dv / kms, expect[c][0], 1e-3);
+        sprintf(name, "%s Sigma_SFR = 1e-2: T_w = %.3g K", conv_names[c],
+                expect[c][1]);
+        check(name, T_w, expect[c][1], 1e-2);
+        sprintf(name, "%s Sigma_SFR = 1e-2: v_B = %.1f km/s", conv_names[c],
+                expect[c][2]);
+        check(name, v_B / kms, expect[c][2], 1e-3);
+      }
     }
   }
 
@@ -132,7 +171,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 2; i++) {
       double dv, u_w;
       wind_launch_kinematics(u_star, eM[i], eK[i] + eT[i],
-                             eK[i] / (eK[i] + eT[i]), &dv, &u_w);
+                             eK[i] / (eK[i] + eT[i]), wind_energy_internal,
+                             gamma, &dv, &u_w);
       char name[96];
       sprintf(name, "S24a %s: Delta v [km/s]", names[i]);
       check(name, dv / kms, dv_tab[i], 3e-3);

@@ -25,6 +25,7 @@
  */
 
 #include "inline.h"
+#include "wind_physics.h"
 
 #include <stdio.h>
 
@@ -86,7 +87,11 @@ struct wind_props {
   /*! SN energy per stellar mass, 1e51 erg / 95.5 Msun */
   double u_star;
 
-  /*! Kinetic fraction eta_E,kin / eta_E (5/14 for Mach 1) */
+  /*! What eta_E counts: kinetic + enthalpy or kinetic + internal energy */
+  enum wind_energy_convention energy_convention;
+
+  /*! Kinetic fraction (Delta v^2 / 2) / (eta_E u_* / eta_M); Mach 1 is 1/4
+   * (enthalpy) or 5/14 (internal) */
   double f_kin;
 
   /*! Unit vector of the launch direction (the disc normal), +- */

@@ -27,10 +27,20 @@
  * Loadings: hot-phase fits of Kim et al. (2020b, Table 5) at |z| = H,
  *    eta_M = 10^-0.86 Sigma_SFR^-0.07,  eta_E = 10^-0.70 Sigma_SFR^0.14,
  * Sigma_SFR in Msun kpc^-2 yr^-1, clipped to [1e-4, 1].
- * Launch (Smith et al. 2024, eqs. 6-8): with u_* the SN energy per stellar
- * mass, a kick Delta v = (2 eta_E,kin u_* / eta_M)^1/2 and an internal energy
- * u_w = eta_E,th u_* / eta_M, with eta_E,kin / eta_E,th = 5/9 (Mach 1 for
- * gamma = 5/3).
+ * Launch: with u_* the SN energy per stellar mass, the energy per launched
+ * mass e_w = eta_E u_* / eta_M is split into a kick Delta v and an internal
+ * energy u_w, the kinetic part being a fraction f of e_w. Two conventions
+ * (Wind:energy_convention):
+ *  - enthalpy (K20b, whose eta_E counts the kinetic plus enthalpy flux):
+ *      Delta v^2 / 2 + gamma u_w = e_w,
+ *    so that the Bernoulli speed (Delta v^2 + 2 gamma u_w)^1/2 = (2 e_w)^1/2;
+ *  - internal (Smith et al. 2024, eqs. 6-8; Arkenstone):
+ *      Delta v^2 / 2 + u_w = e_w.
+ * At Mach 1 the sound speed squared gamma (gamma - 1) u_w equals Delta v^2.
+ * With enthalpy, (Delta v^2 / 2) : gamma u_w = (gamma - 1) / 2, so
+ *   f = (gamma - 1) / (gamma + 1) = 1/4 for gamma = 5/3;
+ * with internal energy, (Delta v^2 / 2) : u_w = gamma (gamma - 1) / 2, so
+ *   f = gamma (gamma - 1) / (2 + gamma (gamma - 1)) = 5/14 for gamma = 5/3.
  * Draw (Springel & Hernquist 2003): one uniform number decides star (u < p_*),
  * wind (p_* <= u < p_* + p_w) or nothing, p_w = eta_M p_*; if p_* + p_w > 1
  * both are divided by their sum.
@@ -43,9 +53,32 @@
 #define WIND_SIGMA_SFR_MIN 1e-4
 #define WIND_SIGMA_SFR_MAX 1.
 
-/*! Fraction of the wind energy launched as kinetic energy at Mach 1:
- * eta_E,kin / eta_E = 5 / (5 + 9) */
-#define WIND_KINETIC_FRACTION_MACH1 (5. / 14.)
+/**
+ * @brief What the energy loading eta_E counts at launch.
+ */
+enum wind_energy_convention {
+  wind_energy_internal = 0, /*<! kinetic + internal energy */
+  wind_energy_enthalpy = 1  /*<! kinetic energy + enthalpy (K20b) */
+};
+
+/**
+ * @brief Kinetic fraction f = (Delta v^2 / 2) / e_w of a Mach-1 launch.
+ *
+ * Mach 1 means Delta v^2 = gamma (gamma - 1) u_w. Enthalpy:
+ * (Delta v^2 / 2) / (gamma u_w) = (gamma - 1) / 2 = f / (1 - f), so
+ * f = (gamma - 1) / (gamma + 1). Internal energy:
+ * (Delta v^2 / 2) / u_w = gamma (gamma - 1) / 2 = f / (1 - f), so
+ * f = gamma (gamma - 1) / (2 + gamma (gamma - 1)).
+ *
+ * @param conv The energy convention.
+ * @param gamma The adiabatic index.
+ */
+static inline double wind_kinetic_fraction_mach1(
+    const enum wind_energy_convention conv, const double gamma) {
+  if (conv == wind_energy_enthalpy) return (gamma - 1.) / (gamma + 1.);
+  const double r = gamma * (gamma - 1.);
+  return r / (2. + r);
+}
 
 /*! SN energy per stellar mass formed, 1e51 erg / 95.5 Msun [erg g^-1] */
 #define WIND_U_STAR_CGS (1e51 / (95.5 * 1.98841e33))
@@ -106,23 +139,34 @@ static inline double wind_TIGRESS_eta_E(const double Sigma_SFR) {
 /**
  * @brief Launch kick and internal energy of a wind particle.
  *
- * m (Delta v^2 / 2 + u_w) = m u_* eta_E / eta_M.
+ * With e_w = u_* eta_E / eta_M and h = gamma (enthalpy) or 1 (internal):
+ * Delta v^2 / 2 = f e_w and h u_w = (1 - f) e_w.
  *
  * @param u_star SN energy per stellar mass (any units of energy per mass).
  * @param eta_M Mass loading (> 0).
  * @param eta_E Energy loading.
- * @param f_kin Kinetic fraction eta_E,kin / eta_E.
+ * @param f_kin Kinetic fraction (Delta v^2 / 2) / e_w.
+ * @param conv The energy convention.
+ * @param gamma The adiabatic index.
  * @param dv (return) The kick, in the velocity units of u_star^1/2.
  * @param u_w (return) The internal energy per mass.
  */
-static inline void wind_launch_kinematics(const double u_star,
-                                          const double eta_M,
-                                          const double eta_E,
-                                          const double f_kin, double *dv,
-                                          double *u_w) {
+static inline void wind_launch_kinematics(
+    const double u_star, const double eta_M, const double eta_E,
+    const double f_kin, const enum wind_energy_convention conv,
+    const double gamma, double *dv, double *u_w) {
   const double e_w = eta_E * u_star / eta_M;
+  const double h = conv == wind_energy_enthalpy ? gamma : 1.;
   *dv = sqrt(2. * f_kin * e_w);
-  *u_w = (1. - f_kin) * e_w;
+  *u_w = (1. - f_kin) * e_w / h;
+}
+
+/**
+ * @brief Bernoulli speed (Delta v^2 + 2 gamma u)^1/2.
+ */
+static inline double wind_bernoulli_speed(const double dv, const double u,
+                                          const double gamma) {
+  return sqrt(dv * dv + 2. * gamma * u);
 }
 
 /**

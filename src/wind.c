@@ -30,6 +30,7 @@
 #ifdef WIND_TIGRESS
 
 /* Local includes. */
+#include "adiabatic_index.h"
 #include "cell.h"
 #include "engine.h"
 #include "error.h"
@@ -101,8 +102,31 @@ void wind_props_init(struct wind_props *props,
   const double energy_cgs = units_cgs_conversion_factor(us, UNIT_CONV_ENERGY);
   props->u_star = 1e51 / energy_cgs / (95.5 * phys_const->const_solar_mass);
 
-  props->f_kin = parser_get_opt_param_double(params, "Wind:kinetic_fraction",
-                                             WIND_KINETIC_FRACTION_MACH1);
+  /* Wind:energy_convention: what eta_E counts at launch.
+   *   enthalpy (default for loading_model TIGRESS): Delta v^2/2 + gamma u_w
+   *     = eta_E u_* / eta_M, the K20b convention (kinetic + enthalpy flux);
+   *   internal (default for loading_model constant and none): Delta v^2/2 +
+   *     u_w = eta_E u_* / eta_M, the Arkenstone convention.
+   * Wind:kinetic_fraction = (Delta v^2/2) / (eta_E u_* / eta_M); its default
+   * is the Mach-1 value, (gamma-1)/(gamma+1) = 1/4 for enthalpy and
+   * gamma(gamma-1)/(2+gamma(gamma-1)) = 5/14 for internal (gamma = 5/3). */
+  char conv[32];
+  parser_get_opt_param_string(
+      params, "Wind:energy_convention", conv,
+      props->model == wind_loading_TIGRESS ? "enthalpy" : "internal");
+  if (strcmp(conv, "enthalpy") == 0)
+    props->energy_convention = wind_energy_enthalpy;
+  else if (strcmp(conv, "internal") == 0)
+    props->energy_convention = wind_energy_internal;
+  else
+    error("Wind:energy_convention must be enthalpy or internal, got '%s'",
+          conv);
+
+  props->f_kin = parser_get_opt_param_double(
+      params, "Wind:kinetic_fraction",
+      wind_kinetic_fraction_mach1(props->energy_convention, hydro_gamma));
+  if (props->f_kin < 0. || props->f_kin > 1.)
+    error("Wind:kinetic_fraction must be in [0, 1]");
 
   double n[3] = {0., 0., 1.};
   parser_get_opt_param_double_array(params, "Wind:launch_direction", 3, n);
@@ -169,8 +193,10 @@ void wind_props_print(const struct wind_props *props) {
         props->eta_M_log10_norm, props->eta_M_slope, props->eta_E_log10_norm,
         props->eta_E_slope);
   message(
-      "Wind: kinetic fraction %.4g, launch direction +-(%.3g, %.3g, %.3g), "
-      "u_* = %.4g (internal units)",
+      "Wind: eta_E counts kinetic + %s, kinetic fraction %.4g, launch "
+      "direction +-(%.3g, %.3g, %.3g), u_* = %.4g (internal units)",
+      props->energy_convention == wind_energy_enthalpy ? "enthalpy"
+                                                       : "internal energy",
       props->f_kin, props->normal[0], props->normal[1], props->normal[2],
       props->u_star);
   message(
@@ -227,8 +253,10 @@ void wind_print_stats(const struct engine *e) {
   if (e->nodeID == 0) {
     message(
         "Wind totals at t=%.6e: launched N=%.0f M=%.6e E_kin=%.6e E_th=%.6e; "
-        "recoupled N=%.0f M=%.6e E_kin=%.6e E_th=%.6e (internal units)",
-        e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+        "recoupled N=%.0f M=%.6e E_kin=%.6e E_th=%.6e; launched "
+        "E_kin+E_th=%.6e E_kin+gamma*E_th=%.6e (internal units)",
+        e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[2] + s[3],
+        s[2] + hydro_gamma * s[3]);
     message(
         "Wind recouplings by criterion: distance %.0f density %.0f time %.0f; "
         "merged into a host %.0f",

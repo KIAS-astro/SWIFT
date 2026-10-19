@@ -31,13 +31,14 @@ class Snapshot:
             return f"PartType{ptype}/{name}" in f
 
     def read(self, ptype, name, cgs=True):
-        """Return a field of PartType<ptype>, in cgs unless cgs=False."""
+        """Return a field of PartType<ptype> as float64, in cgs unless cgs=False."""
         with h5py.File(self.path, "r") as f:
             group = f"PartType{ptype}"
             if group not in f:
                 return np.zeros(0)
             dset = f[f"{group}/{name}"]
-            data = dset[...]
+            # float64: cgs masses of ~1e36 g overflow float32 when summed
+            data = dset[...].astype(np.float64)
             if cgs and CGS_ATTR in dset.attrs:
                 data = data * float(dset.attrs[CGS_ATTR][0])
             return data

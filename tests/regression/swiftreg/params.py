@@ -87,6 +87,8 @@ def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
             "basename": "snap",
             "time_first": 0.0,
             "delta_time": float(snapshot_dt),
+            "recording_triggers_part": [-1, -1],
+            "recording_triggers_bpart": [-1, -1],
         },
         "Statistics": {"delta_time": float(snapshot_dt), "time_first": 0.0},
         "InitialConditions": {

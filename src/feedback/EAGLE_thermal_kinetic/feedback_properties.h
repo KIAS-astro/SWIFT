@@ -242,6 +242,12 @@ struct feedback_props {
   /*! Kick velocity in SNII feedback in internal units */
   float SNII_delta_v;
 
+  /*! Fraction of the SNII energy injected in kinetic form */
+  float SNII_f_kinetic;
+
+  /*! Temperature change of a gas particle heated by SNII (internal units) */
+  float SNe_deltaT_desired;
+
   /*! Energy released by one supernova type II in cgs units */
   double E_SNII_cgs;
 

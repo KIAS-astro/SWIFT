@@ -109,6 +109,18 @@ runner_iact_nonsym_feedback_density(const float r2, const float dx[3],
                            ray_feedback_kinetic_mirr, pj->id, rand_theta_SNII,
                            rand_phi_SNII, mj,
                            si->feedback_data.SNII_rays_ext_mirr + i, pj->v);
+
+    /* The heating rays use their own random streams, so that they are
+     * independent of the kick rays above */
+    const double rand_theta_heat = random_unit_interval_part_ID_and_index(
+        si->id, i, ti_current, random_number_isotropic_SNII_heat_ray_theta);
+    const double rand_phi_heat = random_unit_interval_part_ID_and_index(
+        si->id, i, ti_current, random_number_isotropic_SNII_heat_ray_phi);
+
+    /* Compute arclength for the heated particle (SNII thermal feedback) */
+    ray_minimise_arclength(dx, r, si->feedback_data.SNII_rays_heat + i,
+                           ray_feedback_thermal, pj->id, rand_theta_heat,
+                           rand_phi_heat, mj, /*ray_ext=*/NULL, /*v=*/NULL);
   }
 }
 
@@ -438,7 +450,7 @@ runner_iact_nonsym_feedback_apply(
 
           /* In the absence of a kick event, store the unused kinetic energy
            * for heating */
-          E_kinetic_unused = 0.5 * energy_per_pair;
+          E_kinetic_unused += 0.5 * energy_per_pair;
         }
       }
     }
@@ -516,6 +528,50 @@ runner_iact_nonsym_feedback_apply(
    * thermal energy from the SNII kicks that have not occured */
   if (E_kinetic_unused) {
     timestep_sync_part(pj);
+  }
+
+  /* Finally, SNII stochastic thermal feedback */
+
+  /* Get the total number of SNII thermal energy injections per stellar
+   * particle */
+  const int N_of_SNII_thermal_energy_inj =
+      si->feedback_data.to_distribute.SNII_num_of_thermal_energy_inj;
+
+  /* Are we doing some SNII thermal feedback? */
+  if (N_of_SNII_thermal_energy_inj > 0) {
+
+    int N_of_SNII_energy_inj_received_by_gas = 0;
+
+    /* Find out how many rays this gas particle has received. */
+    for (int i = 0; i < N_of_SNII_thermal_energy_inj; i++) {
+      if (pj->id == si->feedback_data.SNII_rays_heat[i].id_min_length)
+        N_of_SNII_energy_inj_received_by_gas++;
+    }
+
+    /* If the number of SNII energy injections > 0, do SNII feedback */
+    if (N_of_SNII_energy_inj_received_by_gas > 0) {
+
+      /* Compute new energy of this particle */
+      const double u_init = hydro_get_physical_internal_energy(pj, xpj, cosmo);
+      const float delta_u = si->feedback_data.to_distribute.SNII_delta_u;
+      const double u_new =
+          u_init + delta_u * (float)N_of_SNII_energy_inj_received_by_gas;
+
+      /* Inject energy into the particle */
+      hydro_set_physical_internal_energy(pj, xpj, cosmo, u_new);
+      hydro_set_drifted_physical_internal_energy(pj, cosmo, /*pfloor=*/NULL,
+                                                 u_new);
+
+      /* Impose maximal viscosity */
+      hydro_diffusive_feedback_reset(pj);
+
+      /* Mark this particle has having been heated by supernova feedback */
+      tracers_after_supernovae_feedback_part(xpj, /*delta_p_magnitude=*/0.f,
+                                             delta_u, /*kick_velocity=*/0.f);
+
+      /* Synchronize the particle on the timeline */
+      timestep_sync_part(pj);
+    }
   }
 }
 

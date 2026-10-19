@@ -170,6 +170,7 @@ def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
             "SNII_wind_delay_Gyr": 0.03,
             "SNII_delta_T_K": 3.16228e7,
             "SNII_delta_v_km_p_s": 200.0,
+            "SNII_f_kinetic": 1.0,
             "SNII_energy_erg": 1.0e51,
             "SNII_energy_fraction_function": "EAGLE",
             "SNII_energy_fraction_min": 1.0,

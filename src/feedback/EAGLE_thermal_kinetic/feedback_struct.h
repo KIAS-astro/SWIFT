@@ -122,6 +122,12 @@ struct feedback_spart_data {
       /*! Number of SNII energy injections in kinetic form */
       int SNII_num_of_kinetic_energy_inj;
 
+      /*! Change in specific internal energy per SNII heating event */
+      float SNII_delta_u;
+
+      /*! Number of SNII energy injections in thermal form */
+      int SNII_num_of_thermal_energy_inj;
+
     } to_distribute;
   };
 
@@ -130,6 +136,9 @@ struct feedback_spart_data {
   struct ray_data SNII_rays_mirr[eagle_SNII_feedback_num_of_rays];
   struct ray_data_extra SNII_rays_ext_true[eagle_SNII_feedback_num_of_rays];
   struct ray_data_extra SNII_rays_ext_mirr[eagle_SNII_feedback_num_of_rays];
+
+  /* Instantiate ray structs for SNII thermal feedback */
+  struct ray_data SNII_rays_heat[eagle_SNII_feedback_num_of_rays];
 };
 
 #endif /* SWIFT_FEEDBACK_STRUCT_EAGLE_THERMAL_KINETIC_H */

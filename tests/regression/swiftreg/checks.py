@@ -25,7 +25,7 @@ class Check:
     expected: float
     kind: str = "rel"
     tol: float = 0.0
-    sigma: float = None
+    sigma: float | None = None
     source: str = ""
     passed: bool = field(init=False, default=False)
 
@@ -76,5 +76,5 @@ class Check:
             "tol": self.tol,
             "sigma": self.sigma,
             "source": self.source,
-            "passed": self.passed,
+            "passed": bool(self.passed),
         }

@@ -138,6 +138,15 @@ def run_one(key, module, args, extra_flags):
     return record
 
 
+def _to_json(obj):
+    """numpy scalars and arrays in results and ctx.info."""
+    if hasattr(obj, "tolist"):
+        return obj.tolist()
+    if hasattr(obj, "item"):
+        return obj.item()
+    return str(obj)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -183,7 +192,7 @@ def main():
 
     if args.json:
         with open(args.json, "w") as f:
-            json.dump(results, f, indent=1)
+            json.dump(results, f, indent=1, default=_to_json)
     return 0 if all(r["status"] == "pass" for r in results) else 1
 
 

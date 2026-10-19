@@ -167,6 +167,7 @@ def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
             "SNII_max_mass_Msun": 100.0,
             "SNII_feedback_model": "Isotropic",
             "SNII_sampled_delay": 1,
+            "SNII_wind_delay_Gyr": 0.03,
             "SNII_delta_T_K": 3.16228e7,
             "SNII_delta_v_km_p_s": 200.0,
             "SNII_energy_erg": 1.0e51,

@@ -69,6 +69,22 @@ static inline long long light_spawn_count(const double m_parent,
 }
 
 /**
+ * @brief Does a parent too light to spawn (m_parent < 2 m_l) launch itself?
+ *
+ * Such a parent (typically a recoupled light particle back in star-forming
+ * gas) launches whole with probability m_pending / m_parent, so that the
+ * expected launched mass still equals its reservoir.
+ *
+ * @param u Uniform number in [0, 1), the one given to light_spawn_count().
+ */
+static inline int light_launch_whole(const double m_parent,
+                                     const double m_pending, const double m_l,
+                                     const double u) {
+  if (m_pending <= 0. || m_parent >= 2. * m_l) return 0;
+  return u < m_pending / m_parent;
+}
+
+/**
  * @brief Dye of a light particle at recoupling (Bennett et al. 2025, eq. 12).
  *
  * The particle stays above f_thresh for the time 0.2 R_200 / (k v_B) to cross

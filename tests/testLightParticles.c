@@ -22,7 +22,9 @@
  *    included) and uniform numbers, n is floor(m_pend / m_l) or one more
  *    unless the parent's mass limits it, and a parent that spawns keeps at
  *    least m_l (exact integers); over 1e5 uniform numbers the mean of n is
- *    m_pend / m_l (1e-5, the grid spacing);
+ *    m_pend / m_l (1e-5, the grid spacing); a parent below 2 m_l spawns no
+ *    clone and launches itself with probability m_pend / m_parent, so its
+ *    mean launched mass is m_pend (1e-4: grid spacing over the probability);
  *  - creation bookkeeping: a parent and its n clones hold the parent's mass
  *    exactly; the reservoir left plus the spawned mass equals the reservoir
  *    before (1e-15, double rounding); the momentum and energy of parent plus
@@ -101,6 +103,17 @@ int main(int argc, char *argv[]) {
     for (int c = 0; c < ng; c++)
       sum += light_spawn_count(10., m_pend, m_l, (c + 0.5) / ng);
     check("spawn count: mean n = m_pend / m_l", sum / ng, m_pend / m_l, 1e-5);
+
+    /* A parent of 1.5 m_l launches itself with probability m_pend / m_p */
+    const double m_small = 0.15, m_pend_small = 0.01;
+    double launched = 0.;
+    for (int c = 0; c < ng; c++) {
+      const double u = (c + 0.5) / ng;
+      if (light_spawn_count(m_small, m_pend_small, m_l, u) != 0) launched = -1e30;
+      if (light_launch_whole(m_small, m_pend_small, m_l, u)) launched += m_small;
+    }
+    check("whole launch below 2 m_l: mean launched mass = m_pend",
+          launched / ng, m_pend_small, 1e-4);
   }
 
   /* Creation bookkeeping: a parent with velocity v_p spawns n clones, each

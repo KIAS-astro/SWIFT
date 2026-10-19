@@ -273,6 +273,11 @@ INLINE static void wind_launch_kick(struct part *p, struct xpart *xp,
    * The density of a decoupled particle is never recomputed; any positive
    * value keeps the pressure and sound speed finite */
   if (p->rho <= 0.f) p->rho = hydro_get_mass(p) / (p->h * p->h * p->h);
+#if defined(GIZMO_MFM_SPH)
+  /* Likewise the GIZMO volume, which sets the first CFL step at recoupling */
+  if (p->geometry.volume <= 0.f)
+    p->geometry.volume = hydro_get_mass(p) / p->rho;
+#endif
 
   hydro_set_physical_internal_energy(p, xp, cosmo, u_w);
   hydro_set_drifted_physical_internal_energy(p, cosmo, NULL, u_w);

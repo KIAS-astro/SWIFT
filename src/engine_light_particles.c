@@ -126,6 +126,9 @@ static void light_merge_hydro_rates(struct part *a, const double ma,
 static void light_reset_hydro_rates(struct part *p) {
 #if defined(GIZMO_MFM_SPH)
   hydro_part_reset_hydro_fluxes(p);
+  /* Inactive in the flux exchange until its own time-step is set: a clone of
+   * a parent in mid-step would otherwise carry the parent's positive dt */
+  p->flux.dt = -1.0f;
 #endif
   hydro_reset_acceleration(p);
 }
@@ -503,8 +506,8 @@ void engine_light_spawn(struct engine *e) {
             MPI_COMM_WORLD);
 #endif
 
-  if (n_new + n_source == 0) return;
-
+  /* No early return when nothing is spawned: every reservoir must still be
+   * emptied by this draw */
   light_grow_arrays(e, n_new + n_source, with_gravity);
   long long next_id = offset_id;
 
@@ -516,16 +519,34 @@ void engine_light_spawn(struct engine *e) {
       continue;
     if (p->wind_data.m_pending <= 0.) continue;
     const double m_p = hydro_get_mass(p);
-    const long long n = light_spawn_count(
-        m_p, p->wind_data.m_pending, m_l,
-        random_unit_interval(p->id, e->ti_current, random_number_light_spawn));
+    const double u_draw =
+        random_unit_interval(p->id, e->ti_current, random_number_light_spawn);
+    const long long n =
+        light_spawn_count(m_p, p->wind_data.m_pending, m_l, u_draw);
 
     /* Specific launch energy of the reservoir; the reservoir is emptied by
      * every draw, the remainder staying in the parent */
     const double e_w = p->wind_data.E_pending / p->wind_data.m_pending;
-    wind_global_stats.m_rounding += p->wind_data.m_pending - n * m_l;
+    const int whole = light_launch_whole(m_p, p->wind_data.m_pending, m_l, u_draw);
+    wind_global_stats.m_rounding +=
+        p->wind_data.m_pending - (whole ? m_p : n * m_l);
     p->wind_data.m_pending = 0.;
     p->wind_data.E_pending = 0.;
+
+    /* A parent below 2 m_l launches itself */
+    if (whole) {
+      const double sign = random_unit_interval(p->id, e->ti_current,
+                                               random_number_wind_direction) <
+                                  0.5
+                              ? -1.
+                              : 1.;
+      const double dir[3] = {sign * props->normal[0], sign * props->normal[1],
+                             sign * props->normal[2]};
+      wind_light_launch(p, &s->xparts[i], props, cosmo, time, dir, e_w);
+      wind_global_stats.n_spawn += 1.;
+      wind_global_stats.m_spawn += m_p;
+      continue;
+    }
     if (n == 0) continue;
 
     for (long long c = 0; c < n; c++) {

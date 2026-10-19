@@ -75,7 +75,7 @@ __attribute__((always_inline)) INLINE static void external_gravity_acceleration(
 
   const float gh = g->x[0] * potential->g[0] + g->x[1] * potential->g[1] +
                    g->x[2] * potential->g[2];
-  const float pot = -gh / 3.f;
+  const float pot = -gh;
 
   g->a_grav[0] += potential->g[0];
   g->a_grav[1] += potential->g[1];

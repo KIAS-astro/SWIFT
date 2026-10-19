@@ -170,21 +170,25 @@ void wind_struct_restore(struct wind_props *props, FILE *stream) {
  * @brief Print the totals of all ranks as one log line.
  */
 void wind_print_stats(const struct engine *e) {
-  double s[8] = {wind_global_stats.n_launch,     wind_global_stats.m_launch,
-                 wind_global_stats.E_kin_launch, wind_global_stats.E_th_launch,
-                 wind_global_stats.n_recouple,   wind_global_stats.m_recouple,
-                 wind_global_stats.E_kin_recouple,
-                 wind_global_stats.E_th_recouple};
+  struct wind_global_stats s = wind_global_stats;
 #ifdef WITH_MPI
-  double r[8];
-  MPI_Reduce(s, r, 8, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  memcpy(s, r, sizeof(s));
+  struct wind_global_stats r;
+  MPI_Reduce(&s, &r, sizeof(s) / sizeof(double), MPI_DOUBLE, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  s = r;
 #endif
+  const double E_flight =
+      s.E_kin_launch + s.E_th_launch - s.E_launch_recouple;
   if (e->nodeID == 0)
     message(
-        "Wind totals at t=%.6e: launched N=%.0f M=%.6e E_kin=%.6e E_th=%.6e; "
-        "recoupled N=%.0f M=%.6e E_kin=%.6e E_th=%.6e (internal units)",
-        e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+        "Wind totals at t=%.6e: launched N=%.0f M=%.10e E_kin=%.10e "
+        "E_th=%.10e; recoupled N=%.0f M=%.10e E_kin=%.10e E_th=%.10e "
+        "dE_pot=%.10e E_launch=%.10e; in flight E_launch=%.10e; in stars "
+        "M=%.10e E_rec=%.10e dE_pot=%.10e E_launch=%.10e (internal units)",
+        e->time, s.n_launch, s.m_launch, s.E_kin_launch, s.E_th_launch,
+        s.n_recouple, s.m_recouple, s.E_kin_recouple, s.E_th_recouple,
+        s.E_pot_recouple, s.E_launch_recouple, E_flight, s.m_tracer_star,
+        s.E_tracer_star, s.E_pot_tracer_star, s.E_launch_tracer_star);
 }
 
 #endif /* WIND_TIGRESS */

@@ -26,8 +26,9 @@
 /**
  * @brief Wind data carried by a gas particle.
  *
- * Energies are per unit mass, physical, in internal units. The recoupling
- * fields are negative until the particle first recouples.
+ * Energies are per unit mass, physical, in internal units, except the
+ * tracer fields, which are masses and energies. The recoupling times,
+ * energies and distance are negative until the particle first recouples.
  */
 struct wind_part_data {
 
@@ -47,6 +48,9 @@ struct wind_part_data {
   /*! Internal energy per mass just after the last launch */
   float launch_e_th;
 
+  /*! Gravitational potential per mass at the last launch */
+  float launch_phi;
+
   /*! Time of the last recoupling */
   float recouple_time;
 
@@ -55,6 +59,26 @@ struct wind_part_data {
 
   /*! Internal energy per mass at the last recoupling */
   float recouple_e_th;
+
+  /*! Gravitational potential per mass at the last recoupling */
+  float recouple_phi;
+
+  /*! Energy tracer: wind mass received at recoupling, summed over all the
+   * recouplings of this particle. A gas particle keeps it until it forms a
+   * star; SPH does not mix it into neighbours. */
+  float tracer_mass;
+
+  /*! Energy tracer: kinetic plus internal energy received at recoupling,
+   * m (e_kin + u), summed over recouplings */
+  float tracer_energy;
+
+  /*! Energy tracer: potential energy gained in flight, m (phi_rec -
+   * phi_launch), summed over recouplings */
+  float tracer_potential_energy;
+
+  /*! Energy tracer: launch energy m (e_kin + u) of the flights that ended in
+   * the recouplings counted above */
+  float tracer_launch_energy;
 
   /*! Distance from the launch point at the last recoupling */
   float recouple_distance;

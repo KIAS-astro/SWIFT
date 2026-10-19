@@ -38,17 +38,26 @@ def base_params(ctx, ic_file, t_end, snapshot_dt, dt_max, g_cgs=(0.0, 0.0, 0.0))
     return p
 
 
-def wind_tail(log_path):
-    """The last 'Wind totals' line of a SWIFT log as a dict, or None."""
-    last = None
+WIND_TOTALS_KEYS = [
+    "t", "n_launch", "m_launch", "E_kin_launch", "E_th_launch",
+    "n_recouple", "m_recouple", "E_kin_recouple", "E_th_recouple",
+    "E_pot_recouple", "E_launch_recouple", "E_launch_flight",
+    "m_tracer_star", "E_tracer_star", "E_pot_tracer_star", "E_launch_tracer_star"]
+
+
+def wind_totals(log_path):
+    """Every 'Wind totals' line of a SWIFT log, as a list of dicts."""
+    import re
+    rows = []
     with open(log_path, errors="replace") as f:
         for line in f:
             if "Wind totals at" in line:
-                last = line
-    if last is None:
-        return None
-    import re
-    nums = re.findall(r"=\s*([-+0-9.eE]+)", last)
-    keys = ["t", "n_launch", "m_launch", "E_kin_launch", "E_th_launch",
-            "n_recouple", "m_recouple", "E_kin_recouple", "E_th_recouple"]
-    return dict(zip(keys, map(float, nums)))
+                nums = re.findall(r"=\s*([-+0-9.eE]+)", line)
+                rows.append(dict(zip(WIND_TOTALS_KEYS, map(float, nums))))
+    return rows
+
+
+def wind_tail(log_path):
+    """The last 'Wind totals' line of a SWIFT log as a dict, or None."""
+    rows = wind_totals(log_path)
+    return rows[-1] if rows else None

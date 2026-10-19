@@ -33,6 +33,8 @@ struct part;
 struct xpart;
 struct cosmology;
 struct wind_props;
+struct external_potential;
+struct phys_const;
 
 /**
  * @brief Is this gas particle decoupled from the hydrodynamics? Never.
@@ -42,9 +44,17 @@ __attribute__((always_inline)) INLINE static int part_is_decoupled(
   return 0;
 }
 
+INLINE static float wind_specific_potential(
+    const struct part *p, const struct external_potential *potential,
+    const struct phys_const *phys_const, const struct cosmology *cosmo,
+    const int with_self_gravity, const int with_external_gravity,
+    const double time) {
+  return 0.f;
+}
+
 INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
                                         const struct wind_props *props,
-                                        const double time) {}
+                                        const double time, const float phi) {}
 
 /**
  * @brief Does a star form? The comparison of the star formation modules,
@@ -70,7 +80,8 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                const struct wind_props *props,
                                const struct cosmology *cosmo,
                                const double time,
-                               const integertime_t ti_current) {}
+                               const integertime_t ti_current,
+                               const float phi) {}
 
 INLINE static int wind_should_recouple(const struct part *p,
                                        const struct wind_props *props,
@@ -81,7 +92,9 @@ INLINE static int wind_should_recouple(const struct part *p,
 INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                                  const struct wind_props *props,
                                  const struct cosmology *cosmo,
-                                 const double time) {}
+                                 const double time, const float phi) {}
+
+INLINE static void wind_part_becomes_star(const struct part *p) {}
 
 __attribute__((always_inline)) INLINE static void wind_drift_part(
     struct part *p, const struct xpart *xp, const double dt_drift) {}

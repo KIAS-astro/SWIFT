@@ -565,6 +565,9 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
               if (sp != NULL) {
                 float displacement[3] = {0.0, 0.0, 0.0};
 
+                /* The gas particle's wind energy tracer leaves the gas */
+                if (part_converted) wind_part_becomes_star(p);
+
                 /* Copy the properties of the gas particle to the star particle
                  */
                 star_formation_copy_properties(
@@ -664,7 +667,12 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
                                         dt_star)) {
 
             /* Launch the particle as a decoupled wind particle */
-            wind_launch(p, xp, e->wind_props, cosmo, e->time, ti_current);
+            wind_launch(
+                p, xp, e->wind_props, cosmo, e->time, ti_current,
+                wind_specific_potential(
+                    p, e->external_potential, phys_const, cosmo,
+                    e->policy & engine_policy_self_gravity,
+                    e->policy & engine_policy_external_gravity, e->time));
 
             /* It no longer forms stars */
             star_formation_update_part_not_SFR(p, xp, e, sf_props,

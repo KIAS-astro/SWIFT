@@ -97,7 +97,37 @@ INLINE static int wind_write_particles(const struct part *parts,
       parts, wind_data.d_rec,
       "Recoupling distance of the last launch, max(d_rec, factor x kernel "
       "support at launch)");
-  return 12;
+  list[12] = io_make_output_field(
+      "WindLaunchPotentials", FLOAT, 1, UNIT_CONV_ENERGY_PER_UNIT_MASS, 0.f,
+      parts, wind_data.launch_phi,
+      "Gravitational potential per unit mass (self-gravity plus external) at "
+      "the last launch (physical)");
+  list[13] = io_make_output_field(
+      "WindRecouplingPotentials", FLOAT, 1, UNIT_CONV_ENERGY_PER_UNIT_MASS,
+      0.f, parts, wind_data.recouple_phi,
+      "Gravitational potential per unit mass (self-gravity plus external) at "
+      "the last recoupling (physical)");
+  list[14] = io_make_output_field(
+      "WindTracerMasses", FLOAT, 1, UNIT_CONV_MASS, 0.f, parts,
+      wind_data.tracer_mass,
+      "Wind mass this particle received at its recouplings, summed over "
+      "recouplings");
+  list[15] = io_make_output_field(
+      "WindTracerEnergies", FLOAT, 1, UNIT_CONV_ENERGY, 0.f, parts,
+      wind_data.tracer_energy,
+      "Kinetic plus internal energy this particle carried at its "
+      "recouplings, m (v^2/2 + u), summed over recouplings (physical)");
+  list[16] = io_make_output_field(
+      "WindTracerPotentialEnergies", FLOAT, 1, UNIT_CONV_ENERGY, 0.f, parts,
+      wind_data.tracer_potential_energy,
+      "Potential energy gained in flight, m (phi_recouple - phi_launch), "
+      "summed over recouplings (physical)");
+  list[17] = io_make_output_field(
+      "WindTracerLaunchEnergies", FLOAT, 1, UNIT_CONV_ENERGY, 0.f, parts,
+      wind_data.tracer_launch_energy,
+      "Kinetic plus internal energy at launch, m (v^2/2 + u), of the flights "
+      "that ended in the recouplings counted by the tracer (physical)");
+  return 18;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

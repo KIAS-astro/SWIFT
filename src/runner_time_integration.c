@@ -732,7 +732,12 @@ void runner_do_timestep(struct runner *r, struct cell *c, const int timer) {
         int recoupled = 0;
         if (part_is_decoupled(p) &&
             wind_should_recouple(p, e->wind_props, e->time)) {
-          wind_recouple(p, xp, e->wind_props, cosmo, e->time);
+          wind_recouple(
+              p, xp, e->wind_props, cosmo, e->time,
+              wind_specific_potential(
+                  p, e->external_potential, e->physical_constants, cosmo,
+                  e->policy & engine_policy_self_gravity,
+                  e->policy & engine_policy_external_gravity, e->time));
           recoupled = 1;
         }
 

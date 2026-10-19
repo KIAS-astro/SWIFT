@@ -37,8 +37,10 @@
 
 #include "atomic.h"
 #include "cosmology.h"
+#include "gravity.h"
 #include "hydro.h"
 #include "part.h"
+#include "potential.h"
 #include "random.h"
 #include "timeline.h"
 #include "wind_physics.h"
@@ -60,6 +62,37 @@ __attribute__((always_inline)) INLINE static float wind_specific_kinetic(
   return 0.5f * (xp->v_full[0] * xp->v_full[0] +
                  xp->v_full[1] * xp->v_full[1] +
                  xp->v_full[2] * xp->v_full[2]);
+}
+
+/**
+ * @brief Gravitational potential per unit mass at a gas particle (physical):
+ * the self-gravity potential of the last force calculation plus the external
+ * potential.
+ *
+ * Valid for an active particle after the gravity tasks of the step, i.e. at
+ * launch (star formation task) and recoupling (time-step task).
+ *
+ * @param p The #part.
+ * @param potential The external potential.
+ * @param phys_const The physical constants in internal units.
+ * @param cosmo The cosmological model.
+ * @param with_self_gravity Is self-gravity on?
+ * @param with_external_gravity Is the external potential on?
+ * @param time The current time.
+ */
+INLINE static float wind_specific_potential(
+    const struct part *p, const struct external_potential *potential,
+    const struct phys_const *phys_const, const struct cosmology *cosmo,
+    const int with_self_gravity, const int with_external_gravity,
+    const double time) {
+  const struct gpart *gp = p->gpart;
+  if (gp == NULL) return 0.f;
+  float phi = 0.f;
+  if (with_self_gravity) phi += gravity_get_physical_potential(gp, cosmo);
+  if (with_external_gravity)
+    phi += external_gravity_get_potential_energy(time, potential, phys_const,
+                                                 gp);
+  return phi;
 }
 
 /**
@@ -104,11 +137,15 @@ INLINE static float wind_recoupling_distance(const struct part *p,
  *
  * A particle flagged as decoupled in the initial conditions (field
  * WindDecoupled) is launched at the start time with its initial velocity and
- * internal energy: this is how the tests decouple particles by hand.
+ * internal energy: this is how the tests decouple particles by hand. Such
+ * a launch is counted in the global totals. Its launch potential is the
+ * external one only, since no gravity has been computed yet.
+ *
+ * @param phi The external potential per unit mass at the particle.
  */
 INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
                                         const struct wind_props *props,
-                                        const double time) {
+                                        const double time, const float phi) {
 
   const char decoupled = p->wind_data.decoupled;
   for (int k = 0; k < 3; k++) {
@@ -118,19 +155,32 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.launch_time = -1.f;
   p->wind_data.launch_e_kin = -1.f;
   p->wind_data.launch_e_th = -1.f;
+  p->wind_data.launch_phi = 0.f;
   p->wind_data.recouple_time = -1.f;
   p->wind_data.recouple_e_kin = -1.f;
   p->wind_data.recouple_e_th = -1.f;
+  p->wind_data.recouple_phi = 0.f;
   p->wind_data.recouple_distance = -1.f;
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
   p->wind_data.launch_count = 0;
   p->wind_data.decoupled = decoupled ? 1 : 0;
+  p->wind_data.tracer_mass = 0.f;
+  p->wind_data.tracer_energy = 0.f;
+  p->wind_data.tracer_potential_energy = 0.f;
+  p->wind_data.tracer_launch_energy = 0.f;
 
   if (decoupled) {
     p->wind_data.launch_time = time;
     p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
     p->wind_data.launch_e_th = xp->u_full;
+    p->wind_data.launch_phi = phi;
     p->wind_data.launch_count = 1;
+    const double m = hydro_get_mass(p);
+    atomic_add_d(&wind_global_stats.n_launch, 1.);
+    atomic_add_d(&wind_global_stats.m_launch, m);
+    atomic_add_d(&wind_global_stats.E_kin_launch,
+                 m * p->wind_data.launch_e_kin);
+    atomic_add_d(&wind_global_stats.E_th_launch, m * p->wind_data.launch_e_th);
     hydro_reset_acceleration(p);
     /* Never computed for a decoupled particle; any positive value keeps the
      * pressure and sound speed set in the kick finite */
@@ -177,12 +227,16 @@ INLINE static int wind_should_launch(const struct part *p,
 
 /**
  * @brief Launch a particle (WD3): kick along +-n, set u = u_w, decouple.
+ *
+ * @param phi The gravitational potential per unit mass at the particle
+ * (wind_specific_potential()).
  */
 INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                const struct wind_props *props,
                                const struct cosmology *cosmo,
                                const double time,
-                               const integertime_t ti_current) {
+                               const integertime_t ti_current,
+                               const float phi) {
 
   double eta_M, eta_E, dv, u_w;
   wind_loadings(props, xp, &eta_M, &eta_E);
@@ -216,6 +270,7 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   }
   p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
   p->wind_data.launch_e_th = xp->u_full;
+  p->wind_data.launch_phi = phi;
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
 
   const double m = hydro_get_mass(p);
@@ -247,32 +302,63 @@ INLINE static int wind_should_recouple(const struct part *p,
 
 /**
  * @brief Recouple a particle (WD6): it keeps its velocity and internal
- * energy; record them.
+ * energy; record them and add them to the particle's energy tracer.
+ *
+ * @param phi The gravitational potential per unit mass at the particle
+ * (wind_specific_potential()).
  */
 INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                                  const struct wind_props *props,
                                  const struct cosmology *cosmo,
-                                 const double time) {
+                                 const double time, const float phi) {
 
   p->wind_data.decoupled = 0;
   p->wind_data.recouple_time = time;
   p->wind_data.recouple_distance = wind_distance(p);
   p->wind_data.recouple_e_kin = wind_specific_kinetic(xp);
   p->wind_data.recouple_e_th = xp->u_full;
+  p->wind_data.recouple_phi = phi;
   hydro_reset_acceleration(p);
+
+  const double m = hydro_get_mass(p);
+  const double E_rec =
+      m * ((double)p->wind_data.recouple_e_kin + p->wind_data.recouple_e_th);
+  const double E_pot = m * ((double)phi - p->wind_data.launch_phi);
+  const double E_launch =
+      m * ((double)p->wind_data.launch_e_kin + p->wind_data.launch_e_th);
+  p->wind_data.tracer_mass += m;
+  p->wind_data.tracer_energy += E_rec;
+  p->wind_data.tracer_potential_energy += E_pot;
+  p->wind_data.tracer_launch_energy += E_launch;
 
   /* The signal velocity of the first CFL time-step must know that the
    * particle arrives at its speed in gas that is, to first order, at rest */
   hydro_set_v_sig_based_on_velocity_kick(
       p, cosmo, sqrtf(2.f * p->wind_data.recouple_e_kin));
 
-  const double m = hydro_get_mass(p);
   atomic_add_d(&wind_global_stats.n_recouple, 1.);
   atomic_add_d(&wind_global_stats.m_recouple, m);
   atomic_add_d(&wind_global_stats.E_kin_recouple,
                m * p->wind_data.recouple_e_kin);
   atomic_add_d(&wind_global_stats.E_th_recouple,
                m * p->wind_data.recouple_e_th);
+  atomic_add_d(&wind_global_stats.E_pot_recouple, E_pot);
+  atomic_add_d(&wind_global_stats.E_launch_recouple, E_launch);
+}
+
+/**
+ * @brief A gas particle becomes a star: move its energy tracer to the global
+ * total held by stars, so that gas, flight and stars together account for
+ * every launch.
+ */
+INLINE static void wind_part_becomes_star(const struct part *p) {
+  if (p->wind_data.tracer_mass <= 0.f) return;
+  atomic_add_d(&wind_global_stats.m_tracer_star, p->wind_data.tracer_mass);
+  atomic_add_d(&wind_global_stats.E_tracer_star, p->wind_data.tracer_energy);
+  atomic_add_d(&wind_global_stats.E_pot_tracer_star,
+               p->wind_data.tracer_potential_energy);
+  atomic_add_d(&wind_global_stats.E_launch_tracer_star,
+               p->wind_data.tracer_launch_energy);
 }
 
 /**

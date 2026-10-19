@@ -80,10 +80,19 @@ struct wind_props {
 /**
  * @brief Running totals of the launches and recouplings on this rank.
  * Energies in internal units, kinetic and thermal separately.
+ *
+ * E_pot_recouple sums m (phi_rec - phi_launch) and E_launch_recouple the
+ * launch energies m (e_kin + u) of the flights that have ended, so the
+ * launch energy still in flight is E_kin_launch + E_th_launch -
+ * E_launch_recouple. The *_tracer_star totals are the energy tracers of
+ * gas particles that became stars.
  */
 struct wind_global_stats {
   double n_launch, m_launch, E_kin_launch, E_th_launch;
   double n_recouple, m_recouple, E_kin_recouple, E_th_recouple;
+  double E_pot_recouple, E_launch_recouple;
+  double m_tracer_star, E_tracer_star, E_pot_tracer_star,
+      E_launch_tracer_star;
 };
 
 extern struct wind_global_stats wind_global_stats;

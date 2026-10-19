@@ -611,6 +611,12 @@ INLINE static void gravity_cache_write_back(const struct gravity_cache *c,
       gparts[i].a_grav[1] += a_y[i];
       gparts[i].a_grav[2] += a_z[i];
       gravity_add_comoving_potential(&gparts[i], pot[i]);
+#ifdef SWIFT_GRAVRACE_CHECK
+      gparts[i].gr_a_tree[0] += a_x[i];
+      gparts[i].gr_a_tree[1] += a_y[i];
+      gparts[i].gr_a_tree[2] += a_z[i];
+      gparts[i].gr_pot_tree += pot[i];
+#endif
     }
   }
 }

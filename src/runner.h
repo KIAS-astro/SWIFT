@@ -127,6 +127,9 @@ void runner_do_limiter(struct runner *r, struct cell *c, int force, int timer);
 void runner_do_sync(struct runner *r, struct cell *c, int force, int timer);
 void runner_do_grav_mesh(struct runner *r, struct cell *c, int timer);
 void runner_do_grav_external(struct runner *r, struct cell *c, int timer);
+#ifdef SWIFT_GRAVRACE_CHECK
+void gravrace_flush(const struct engine *e);
+#endif
 void runner_do_grav_fft(struct runner *r, int timer);
 void runner_do_csds(struct runner *r, struct cell *c, int timer);
 void runner_do_fof_search_self(struct runner *r, struct cell *c, int timer);

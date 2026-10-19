@@ -65,6 +65,77 @@
 
 extern const int sort_stack_size;
 
+#ifdef SWIFT_GRAVRACE_CHECK
+#include <math.h>
+#include <pthread.h>
+
+#include "atomic.h"
+
+/* Compares each active gpart's a_grav and potential, before end_force, with
+ * the race-free shadow sums gr_*_tree + gr_*_ext. */
+static pthread_mutex_t gravrace_mutex = PTHREAD_MUTEX_INITIALIZER;
+static FILE *gravrace_events = NULL;
+static long long gravrace_n_checked = 0, gravrace_n_acc = 0,
+                 gravrace_n_pot = 0;
+static long long gravrace_n_lines = 0;
+
+static void gravrace_check(const struct engine *e, const struct gpart *gp) {
+  double da2 = 0., at2 = 0., ae2 = 0., scale = 0., dot = 0.;
+  for (int k = 0; k < 3; k++) {
+    const double ref = (double)gp->gr_a_tree[k] + (double)gp->gr_a_ext[k];
+    const double d = (double)gp->a_grav[k] - ref;
+    da2 += d * d;
+    at2 += ref * ref;
+    ae2 += (double)gp->gr_a_ext[k] * gp->gr_a_ext[k];
+    dot += d * gp->gr_a_ext[k];
+  }
+  scale = sqrt(at2) + sqrt(ae2);
+  {
+    double t2 = 0.;
+    for (int k = 0; k < 3; k++) t2 += (double)gp->gr_a_tree[k] * gp->gr_a_tree[k];
+    scale += sqrt(t2);
+  }
+  const double pref = (double)gp->gr_pot_tree + (double)gp->gr_pot_ext;
+  const double dpot = (double)gp->potential - pref;
+  const double pscale = fabs(gp->gr_pot_tree) + fabs(gp->gr_pot_ext);
+  const int bad_acc = sqrt(da2) > 1e-4 * scale;
+  const int bad_pot = fabs(dpot) > 1e-4 * pscale;
+  atomic_inc(&gravrace_n_checked);
+  if (!bad_acc && !bad_pot) return;
+  pthread_mutex_lock(&gravrace_mutex);
+  if (bad_acc) gravrace_n_acc++;
+  if (bad_pot) gravrace_n_pot++;
+  if (gravrace_events == NULL) {
+    gravrace_events = fopen("gravrace_events.txt", "w");
+    fprintf(gravrace_events,
+            "# step type a_ref_norm a_ext_norm a_tree_norm da_norm "
+            "dax.a_ext/|a_ext|^2 pot_ref pot_ext dpot\n");
+  }
+  if (gravrace_n_lines < 2000000) {
+    double t2 = 0.;
+    for (int k = 0; k < 3; k++) t2 += (double)gp->gr_a_tree[k] * gp->gr_a_tree[k];
+    fprintf(gravrace_events, "%d %d %.6e %.6e %.6e %.6e %.6e %.6e %.6e %.6e\n",
+            e->step, gp->type, sqrt(at2), sqrt(ae2), sqrt(t2), sqrt(da2),
+            ae2 > 0. ? dot / ae2 : 0., pref, (double)gp->gr_pot_ext, dpot);
+    gravrace_n_lines++;
+  }
+  pthread_mutex_unlock(&gravrace_mutex);
+}
+
+void gravrace_flush(const struct engine *e) {
+  static FILE *f = NULL;
+  if (f == NULL) {
+    f = fopen("gravrace_steps.txt", "w");
+    fprintf(f, "# step time n_checked n_bad_acc n_bad_pot\n");
+  }
+  fprintf(f, "%d %.9e %lld %lld %lld\n", e->step, e->time,
+          gravrace_n_checked, gravrace_n_acc, gravrace_n_pot);
+  fflush(f);
+  if (gravrace_events) fflush(gravrace_events);
+  gravrace_n_checked = gravrace_n_acc = gravrace_n_pot = 0;
+}
+#endif
+
 /**
  * @brief Calculate gravity acceleration from external potential
  *
@@ -105,6 +176,16 @@ void runner_do_grav_external(struct runner *r, struct cell *c, int timer) {
 
       /* Is this part within the time step? */
       if (gpart_is_active(gp, e)) {
+#ifdef SWIFT_GRAVRACE_CHECK
+        struct gpart tmp = *gp;
+        tmp.a_grav[0] = tmp.a_grav[1] = tmp.a_grav[2] = 0.f;
+        tmp.potential = 0.f;
+        external_gravity_acceleration(time, potential, constants, &tmp);
+        gp->gr_a_ext[0] = tmp.a_grav[0];
+        gp->gr_a_ext[1] = tmp.a_grav[1];
+        gp->gr_a_ext[2] = tmp.a_grav[2];
+        gp->gr_pot_ext = tmp.potential;
+#endif
         external_gravity_acceleration(time, potential, constants, gp);
       }
     }
@@ -919,6 +1000,10 @@ void runner_do_end_grav_force(struct runner *r, struct cell *c, int timer) {
       struct gpart *restrict gp = &gparts[k];
 
       if (gpart_is_active(gp, e)) {
+
+#ifdef SWIFT_GRAVRACE_CHECK
+        gravrace_check(e, gp);
+#endif
 
         /* Finish the force calculation */
         gravity_end_force(gp, G_newton, potential_normalisation, periodic,

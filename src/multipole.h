@@ -3157,6 +3157,12 @@ __attribute__((nonnull)) INLINE static void gravity_L2P(
   gp->a_grav[1] += a_grav[1];
   gp->a_grav[2] += a_grav[2];
   gravity_add_comoving_potential(gp, pot);
+#ifdef SWIFT_GRAVRACE_CHECK
+  gp->gr_a_tree[0] += a_grav[0];
+  gp->gr_a_tree[1] += a_grav[1];
+  gp->gr_a_tree[2] += a_grav[2];
+  gp->gr_pot_tree += pot;
+#endif
 
 #ifdef SWIFT_GRAVITY_FORCE_CHECKS
   gp->a_grav_m2l[0] += a_grav[0];

@@ -41,6 +41,14 @@ struct gpart {
   /*! Particle acceleration from the mesh. */
   float a_grav_mesh[3];
 
+#ifdef SWIFT_GRAVRACE_CHECK
+  /*! Shadow sums: tree and external contributions, accumulated separately */
+  float gr_a_tree[3];
+  float gr_pot_tree;
+  float gr_a_ext[3];
+  float gr_pot_ext;
+#endif
+
 #ifndef SWIFT_GRAVITY_NO_POTENTIAL
 
   /*! Gravitational potential from the tree.*/

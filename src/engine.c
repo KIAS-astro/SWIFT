@@ -2431,6 +2431,9 @@ void engine_init_particles(struct engine *e, int flag_entropy_ICs,
   TIMER_TIC2;
   engine_launch(e, "tasks");
   TIMER_TOC2(timer_runners);
+#ifdef SWIFT_GRAVRACE_CHECK
+  gravrace_flush(e);
+#endif
 
   /* When running over MPI, synchronize top-level cells */
 #ifdef WITH_MPI
@@ -2987,6 +2990,9 @@ int engine_step(struct engine *e) {
   TIMER_TIC;
   engine_launch(e, "tasks");
   TIMER_TOC(timer_runners);
+#ifdef SWIFT_GRAVRACE_CHECK
+  gravrace_flush(e);
+#endif
 
   /* When running over MPI, synchronize top-level cells */
 #ifdef WITH_MPI

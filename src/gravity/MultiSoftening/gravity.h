@@ -241,6 +241,12 @@ __attribute__((always_inline)) INLINE static void gravity_init_gpart(
   gp->a_grav[1] = 0.f;
   gp->a_grav[2] = 0.f;
 
+#ifdef SWIFT_GRAVRACE_CHECK
+  gp->gr_a_tree[0] = gp->gr_a_tree[1] = gp->gr_a_tree[2] = 0.f;
+  gp->gr_a_ext[0] = gp->gr_a_ext[1] = gp->gr_a_ext[2] = 0.f;
+  gp->gr_pot_tree = gp->gr_pot_ext = 0.f;
+#endif
+
   /* Zero the potential */
 #ifndef SWIFT_GRAVITY_NO_POTENTIAL
   gp->potential = 0.f;

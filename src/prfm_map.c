@@ -119,11 +119,12 @@ void prfm_map_params_init(struct prfm_map_params *mp,
   if (mp->R_cyl <= 0. || mp->half_height <= 0.)
     error("PRFM map: cylinder radius and half-height must be > 0");
 
-#ifndef EXTERNAL_POTENTIAL_HERNQUIST
+#if !defined(EXTERNAL_POTENTIAL_HERNQUIST) && !defined(EXTERNAL_POTENTIAL_NFW_DK)
   if (mp->use_dark_matter)
     error(
-        "PRFMStarFormation:use_dark_matter needs the Hernquist external "
-        "potential (--with-ext-potential=hernquist); set it to 0 otherwise.");
+        "PRFMStarFormation:use_dark_matter needs the Hernquist or NFW-DK "
+        "external potential (--with-ext-potential=hernquist or nfw-dk); set "
+        "it to 0 otherwise.");
 #endif
 }
 
@@ -137,7 +138,7 @@ void prfm_map_params_print(const struct prfm_map_params *mp) {
       mp->npix, mp->npix, mp->pixel, mp->half_width, mp->half_height,
       mp->R_cyl, mp->centre[0], mp->centre[1], mp->centre[2],
       mp->centre_is_absolute ? "absolute" : "relative to the box centre",
-      mp->use_dark_matter ? "from the Hernquist potential" : "= 0");
+      mp->use_dark_matter ? "from the external potential" : "= 0");
 }
 
 /**
@@ -331,6 +332,17 @@ void prfm_map_sample(const double x[3], double *Sigma_g, double *Sigma_s,
     const double r = sqrt(rx * rx + ry * ry + rz * rz + pot->epsilon2);
     const double ra = r + pot->al;
     *rho_d = pot->mass * pot->al / (2. * M_PI * r * ra * ra * ra);
+  }
+#elif defined(EXTERNAL_POTENTIAL_NFW_DK)
+  /* NFW plus the Diemer & Kravtsov (2014) outer term, r softened by the
+   * potential's epsilon as in the Hernquist case. */
+  const struct external_potential *pot = prfm_map.potential;
+  if (pot != NULL) {
+    const double rx = x[0] - pot->x[0];
+    const double ry = x[1] - pot->x[1];
+    const double rz = x[2] - pot->x[2];
+    const double r = sqrt(rx * rx + ry * ry + rz * rz + pot->eps * pot->eps);
+    *rho_d = nfw_dk_density(pot, r);
   }
 #endif
 }

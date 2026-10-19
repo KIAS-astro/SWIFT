@@ -42,6 +42,8 @@
 #include "./potential/nfw/potential.h"
 #elif defined(EXTERNAL_POTENTIAL_NFW_MN)
 #include "./potential/nfw_mn/potential.h"
+#elif defined(EXTERNAL_POTENTIAL_NFW_DK)
+#include "./potential/nfw_dk/potential.h"
 #elif defined(EXTERNAL_POTENTIAL_MWPotential2014)
 #include "./potential/MWPotential2014/potential.h"
 #elif defined(EXTERNAL_POTENTIAL_DISC_PATCH)

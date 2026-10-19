@@ -1,0 +1,107 @@
+"""Milky Way-mass isolated disc at near-target resolution, f_kin series (long tier).
+
+Chaikin et al. (2023) ran isolated discs to see what the thermal-kinetic scheme does
+to a galaxy: its star formation history, structure, outflows and the
+Kennicutt-Schmidt relation. This test repeats their H12 set-up with SWIFT's
+EAGLE model and the EAGLE-thermal-kinetic module.
+
+ICs: the COLIBRE isolated disc M6_disk of Nobels et al. (2024; SWIFT web storage,
+ICs/IsolatedGalaxies_COLIBRE), gas particle mass 8e5 Msun (Chaikin+23 "M6"), 20550
+gas and 47950 star particles, in a Hernquist potential with M200 = 1.37e12 Msun,
+c = 9, disc fraction 0.04, bulge fraction 0.014 (as Chaikin+23 Sec. 3.2 and the SWIFT
+IsolatedGalaxy_feedback example). Softening 0.4 kpc. EAGLE star formation (pressure
+law), cooling and reference entropy floor; enrichment on, SNIa continuous.
+SN feedback as Chaikin+23's fiducial: f_E = 2, Delta T = 10^7.5 K, Delta v = 50 km/s,
+8 rays, with f_kin = 0, 0.1, 1, and one run with COLIBRE's Delta T(n_H) (m6 values)
+at f_kin = 0.1. 1 Gyr, snapshots every 10 Myr.
+
+Recorded: star formation rate history (from star birth times), and the snapshots for
+maps, profiles, the Kennicutt-Schmidt relation and outflow rates (analysed in
+swift-feedback-method). Check: each run reached 1 Gyr.
+"""
+
+import os
+import shutil
+
+import numpy as np
+
+from swiftreg import params, units
+from swiftreg.checks import Check
+from swiftreg.snapshot import snapshots
+
+DESCRIPTION = "isolated MW-mass disc at 8e5 Msun: f_kin = 0, 0.1, 1 and COLIBRE Delta T(n)"
+TIER = "long"
+BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-tracers=EAGLE",
+                 "--with-entropy-floor=EAGLE", "--with-stars=EAGLE",
+                 "--with-star-formation=EAGLE", "--with-black-holes=EAGLE",
+                 "--with-ext-potential=hernquist", "--with-number-of-SNII-rays=8",
+                 "--with-feedback=EAGLE-thermal-kinetic"]}
+
+IC_URL = ("https://virgodb.cosma.dur.ac.uk/swift-webstorage/ICs/IsolatedGalaxies_COLIBRE/"
+          "M6_disk.hdf5")
+T_END = 1.0227  # internal units (kpc / (km/s)), 1 Gyr
+DT_SNAP = 1.0227e-2  # 10 Myr
+COLIBRE_M6 = {"SNII_delta_T_model": "DensityDependent", "SNII_delta_T_K": 10 ** 6.5,
+              "SNII_delta_T_n_pivot_H_p_cm3": 0.5, "SNII_delta_T_min_K": 10 ** 6.75,
+              "SNII_delta_T_max_K": 1e8}
+RUNS = {
+    "fkin0": {"SNII_f_kinetic": 0.0},
+    "fkin0.1": {"SNII_f_kinetic": 0.1},
+    "fkin1": {"SNII_f_kinetic": 1.0},
+    "colibre": dict(COLIBRE_M6, SNII_f_kinetic=0.1),
+}
+
+
+def ic_file(data_dir):
+    import subprocess
+    path = os.path.join(data_dir, "ics", "M6_disk.hdf5")
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        subprocess.run(["curl", "-fsSL", "-o", path + ".part", IC_URL], check=True)
+        os.replace(path + ".part", path)
+    return path
+
+
+def run(ctx):
+    for t in ("coolingtables", "photometry", "yieldtables"):
+        ctx.table(t)
+    ics = ic_file(ctx.data_dir)
+    for name, fb in RUNS.items():
+        os.makedirs(ctx.path(name))
+        shutil.copy(ics, ctx.path(name, "M6_disk.hdf5"))
+        p = params.eagle_base("M6_disk.hdf5", T_END, ctx.data_dir, DT_SNAP, dt_max=1e-2)
+        p["InitialConditions"].update({"periodic": 0, "stars_smoothing_length": 0.5})
+        p["Snapshots"]["compression"] = 4
+        p["Gravity"].update({"max_physical_DM_softening": 0.4,
+                             "max_physical_baryon_softening": 0.4})
+        p["SPH"].update({"h_min_ratio": 0.1, "h_max": 10.0, "minimal_temperature": 100.0})
+        p["Scheduler"] = {"max_top_level_cells": 16, "tasks_per_cell": 200}
+        p["HernquistPotential"] = {
+            "useabspos": 0, "position": [0.0, 0.0, 0.0], "idealizeddisk": 1,
+            "M200": 137.0, "h": 0.704, "concentration": 9.0, "diskfraction": 0.040,
+            "bulgefraction": 0.014, "timestep_mult": 0.01, "epsilon": 0.4}
+        p["EAGLEFeedback"].update({
+            "SNII_energy_fraction_min": 2.0, "SNII_energy_fraction_max": 2.0,
+            "SNII_delta_T_K": 10 ** 7.5, "SNII_delta_v_km_p_s": 50.0,
+            "SNII_sampled_delay": 1})
+        p["EAGLEFeedback"].update(fb)
+        ctx.swift(p, ["--hydro", "--self-gravity", "--external-gravity", "--stars",
+                      "--star-formation", "--cooling", "--feedback", "--limiter", "--sync"],
+                  subdir=name, name=name, timeout=6 * 3600)
+
+
+def analyze(ctx):
+    checks = []
+    for name in RUNS:
+        snaps = snapshots(ctx.path(name))
+        last = snaps[-1]
+        birth = last.read(4, "BirthTimes") / units.MYR
+        m = last.read(4, "InitialMasses") / units.SOLAR_MASS
+        new = birth > 0
+        edges = np.arange(0, 1001, 10.0)
+        sfr = np.histogram(birth[new], edges, weights=m[new])[0] / 10e6
+        ctx.info[name] = {"t_Myr": (0.5 * (edges[1:] + edges[:-1])).tolist(),
+                          "sfr_Msun_yr": sfr.tolist()}
+        checks.append(Check(f"{name}: final time [Myr]", last.time_cgs / units.MYR, 1000.0,
+                            kind="rel", tol=1e-2, source="run completed"))
+    return checks

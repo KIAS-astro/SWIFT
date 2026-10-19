@@ -108,7 +108,8 @@ def run(ctx):
                              "max_physical_baryon_softening": SOFTENING})
         # h_max 10 kpc (the COLIBRE example value) leaves particles in the hot CGM and in
         # outflows with too few neighbours; SPHENIX only warns, GIZMO's volume estimate
-        # degenerates and the time-step collapses. SWIFT_REG_ISOGAL_HMAX overrides it.
+        # degenerates and the time-step collapses. SWIFT_REG_ISOGAL_HMAX overrides it; keep
+        # it below the top-level cell size (box / max_top_level_cells = 285 kpc here).
         p["SPH"].update({"h_min_ratio": 0.1,
                          "h_max": float(os.environ.get("SWIFT_REG_ISOGAL_HMAX", "10")),
                          "minimal_temperature": 100.0})

@@ -7,7 +7,8 @@ differs. Runs (SWIFT_REG_ARK2_RUNS, comma-separated; default all):
   tig_hot         TIGRESS K20b hot loadings at Sigma_SFR (enthalpy convention)
   tig_2ph         tig_hot plus the warm channel (K20 set: eta_M,warm through K26
                   mhd 1.3 at 2 kpc)
-  tig_hot_cr      loading_set TIGRESSpp without the warm channel: hot x (0.515,
+  tig_2ph_v150, tig_2ph_v200  the same with warm launch speeds 150, 200 km/s
+  tig_hot_cr     loading_set TIGRESSpp without the warm channel: hot x (0.515,
                   0.40), CR eta_E = 0.3 carried by the hot phase, thermal deposit
   tig_2ph_cr      TIGRESSpp with the warm channel (eta_M,warm through K26 crmhd
                   2.8 at 2 kpc), CR thermal deposit
@@ -59,6 +60,10 @@ S24A_HIGH = {"loading_model": "constant", "eta_M": 0.32, "eta_E": 0.900,
 WINDS = {
     "tig_hot": {"loading_model": "TIGRESS"},
     "tig_2ph": {"loading_model": "TIGRESS", "warm_phase": 1},
+    "tig_2ph_v150": {"loading_model": "TIGRESS", "warm_phase": 1,
+                     "warm_launch_speed_kms": 150.0},
+    "tig_2ph_v200": {"loading_model": "TIGRESS", "warm_phase": 1,
+                     "warm_launch_speed_kms": 200.0},
     "tig_hot_cr": {"loading_model": "TIGRESS", "loading_set": "TIGRESSpp"},
     "tig_2ph_cr": {"loading_model": "TIGRESS", "loading_set": "TIGRESSpp",
                    "warm_phase": 1},

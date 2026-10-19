@@ -324,6 +324,21 @@ __attribute__((always_inline)) INLINE static double wind_distance(
 }
 
 /**
+ * @brief Distance that decides recoupling: the 3D distance for the hot
+ * phase; for the warm phase the height gained along the launch direction,
+ * since a slow particle's 3D path is dominated by the disc rotation
+ * (wind-design.md Sec. 10.3).
+ */
+__attribute__((always_inline)) INLINE static double wind_recoupling_measure(
+    const struct part *p, const struct wind_props *props) {
+  if (p->wind_data.phase != 2) return wind_distance(p);
+  const double *dx = p->wind_data.dx;
+  return p->wind_data.launch_sign *
+         (dx[0] * props->normal[0] + dx[1] * props->normal[1] +
+          dx[2] * props->normal[2]);
+}
+
+/**
  * @brief Should a decoupled particle recouple (WD5)? A warm particle also
  * recouples at its apex (wind-design.md Sec. 10.3).
  */
@@ -335,7 +350,7 @@ INLINE static int wind_should_recouple(const struct part *p,
   if (p->wind_data.phase == 2 &&
       wind_past_apex(xp->v_full, props->normal, p->wind_data.launch_sign))
     return 1;
-  return wind_distance(p) >= p->wind_data.d_rec ||
+  return wind_recoupling_measure(p, props) >= p->wind_data.d_rec ||
          time - p->wind_data.launch_time >= props->t_rec;
 }
 
@@ -356,7 +371,7 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
 
   p->wind_data.decoupled = 0;
   p->wind_data.recouple_time = time;
-  p->wind_data.recouple_distance = wind_distance(p);
+  p->wind_data.recouple_distance = wind_recoupling_measure(p, props);
   p->wind_data.recouple_e_kin = wind_specific_kinetic(xp);
   p->wind_data.recouple_e_th = xp->u_full;
   hydro_reset_acceleration(p);

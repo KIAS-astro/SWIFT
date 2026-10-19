@@ -95,7 +95,8 @@ INLINE static int wind_write_particles(const struct part *parts,
   list[10] = io_make_output_field(
       "WindRecouplingDistances", FLOAT, 1, UNIT_CONV_LENGTH, 1.f, parts,
       wind_data.recouple_distance,
-      "Distance from the launch point at the last recoupling");
+      "Distance from the launch point at the last recoupling (warm phase: "
+      "height gained along the launch direction)");
   list[11] = io_make_output_field(
       "WindRecouplingDistanceThresholds", FLOAT, 1, UNIT_CONV_LENGTH, 1.f,
       parts, wind_data.d_rec,

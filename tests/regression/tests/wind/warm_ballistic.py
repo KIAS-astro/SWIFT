@@ -19,10 +19,11 @@ Two runs: cr_deposit thermal and none. t_rec = 50 Myr, run 15 Myr, dt_max
 
 Validation checks (each run):
   1. slow warm particles: recoupling time against v_z / g (to dt_max) and
-     displacement at recoupling against the analytic parabola
-     |(v_h t, v_z t - g t^2 / 2)| at the recoupling time (relative 1e-4); every
-     one recoupled by the apex test (log: apex recouplings = 8);
-  2. fast warm particles: d_rec,warm <= d < d_rec,warm + |v| dt_max;
+     recorded recoupling distance (for the warm phase the height gained along
+     the launch direction, not the 3D path) against v_z t - g t^2 / 2 at the
+     recoupling time (relative 1e-4); every one recoupled by the apex test
+     (log: apex recouplings = 8);
+  2. fast warm particles: d_rec,warm <= height < d_rec,warm + |v| dt_max;
   3. hot particles: recoupled, CR energy 0 afterwards;
   4. CR bookkeeping from the log (doubles): launched = released (1e-12) =
      6 m x 1e16 erg/g (1e-6, float masses), deposited = released (thermal) or
@@ -172,10 +173,11 @@ def analyze(ctx):
         checks.append(Check(f"{name}: slow warm: max |t_rec - v_z/g| / dt_max",
                             np.abs(tt - t_apex).max() / dt, 1.0 + 1e-6, kind="max",
                             source="apex tested at the end of every step"))
-        d_an = np.hypot(vh0 * tt, vz0 * tt - 0.5 * g * tt ** 2)
-        checks.append(Check(f"{name}: slow warm: max |d_rec / parabola - 1|",
+        d_an = vz0 * tt - 0.5 * g * tt ** 2
+        checks.append(Check(f"{name}: slow warm: max |height / parabola - 1|",
                             np.abs(d_rec[slow] / d_an - 1).max(), 1e-4, kind="max",
-                            source="ballistic in the constant field, at the recoupling time"))
+                            source="ballistic in the constant field, height along the "
+                                   "launch direction at the recoupling time"))
         vrec = np.sqrt(2 * ek[fast])
         exc = (d_rec[fast] - d_thr[fast]) / (vrec * dt)
         checks.append(Check(f"{name}: fast warm: d_rec,warm threshold",

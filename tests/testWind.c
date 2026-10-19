@@ -171,7 +171,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 2; i++) {
       double dv, u_w;
       wind_launch_kinematics(u_star, eM[i], eK[i] + eT[i],
-                             eK[i] / (eK[i] + eT[i]), &dv, &u_w);
+                             eK[i] / (eK[i] + eT[i]), wind_energy_internal,
+                             5. / 3., &dv, &u_w);
       char name[96];
       sprintf(name, "S24a %s: Delta v [km/s]", names[i]);
       check(name, dv / kms, dv_tab[i], 3e-3);

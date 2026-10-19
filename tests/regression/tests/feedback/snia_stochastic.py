@@ -3,9 +3,12 @@
 COLIBRE injects SNIa energy with the stochastic thermal scheme of the SNII
 channel (f_E = 1, f_kin = 0, the same Delta T; Schaye et al. 2026, eq. 21 and
 Sec. 3.7); EAGLE spreads it over all neighbours every step. Both must inject
-    E = 1e51 erg x m_* x nu [exp(-(t1 - t_d)/tau) - exp(-(t2 - t_d)/tau)]
+    E = 1e51 erg x m_* x nu [exp(-t1/tau) - exp(-t2/tau)],   t1, t2 > t_d,
 over a run from star age t1 to t2, for SWIFT's exponential delay-time
-distribution with nu = SNIa_DTD_exp_norm_p_Msun, tau, t_d.
+distribution with nu = SNIa_DTD_exp_norm_p_Msun, tau and t_d
+(eagle_feedback_number_of_SNIa in src/feedback/EAGLE/enrichment.h). The
+exponential is in the star age t, not in t - t_d, so a star makes
+nu exp(-t_d/tau) SNIa per Msun in total, not nu.
 
 The feedback box of feedback/_common.py with 128 stars of 20 m_g born at t = 0;
 the run starts at t = 97.8 Myr (time_begin = 0.1) and lasts 51 Myr, so only SNIa
@@ -13,13 +16,18 @@ release energy (CCSN end at about 40 Myr; SNII feedback off). SNIa enrichment is
 on, because SWIFT computes the SNIa energy in the enrichment step; AGB and SNII
 enrichment are off and AGB ejecta carry no kinetic energy.
 
-Status (2026-10-20): the continuous run injects 2.1 per cent less than the DTD
-integral (3.3 per cent before the age cut below was raised); the cause is not yet
-found, and the check is left failing until it is. The stochastic run agrees with
-both within its 10 per cent Poisson scatter.
+Status (2026-10-20): with the expected energy written in t - t_d, as before,
+the continuous run measured 0.979, a shortfall of exp(-t_d/tau) = 0.980 for
+t_d = 40 Myr and tau = 2 Gyr. Against SWIFT's DTD it measures 0.9985. The
+continuous run draws no random numbers; the 0.15 per cent residual is the same
+for three sets of star positions (ics SEED 2026, 7, 99).
 
 Runs and checks:
-  continuous: energy gained / E within 1e-2 (SPH energy conservation);
+  continuous: energy gained / E within 1e-2. All time-bins end at t2, so no
+  star holds back energy at the last output; at intermediate outputs a star
+  owes up to one 0.8 Myr step and the ratio dips to 0.94. The tolerance
+  bounds SPH energy conservation and float rounding of the injected energy;
+  the measured residual is 1.5e-3;
   stochastic, Delta T = 10^6.5 K: energy gained / E within 4 Poisson sigma of
   the expected number of heating events E / dE_heat.
 """
@@ -70,7 +78,8 @@ def expected_energy(fb, m_star_cgs, age1_yr, age2_yr):
     nu = fb["SNIa_DTD_exp_norm_p_Msun"]
     tau = fb["SNIa_DTD_exp_timescale_Gyr"] * 1e9
     td = fb["SNIa_DTD_delay_Gyr"] * 1e9
-    n_per_msun = nu * (math.exp(-(age1_yr - td) / tau) - math.exp(-(age2_yr - td) / tau))
+    age1_yr = max(age1_yr, td)
+    n_per_msun = nu * (math.exp(-age1_yr / tau) - math.exp(-age2_yr / tau))
     return fb["SNIa_energy_erg"] * c.N_STARS * m_star_cgs / units.SOLAR_MASS * n_per_msun
 
 

@@ -113,7 +113,10 @@ def run(ctx):
         p["SPH"].update({"h_min_ratio": 0.1,
                          "h_max": float(os.environ.get("SWIFT_REG_ISOGAL_HMAX", "10")),
                          "minimal_temperature": 100.0})
-        p["Scheduler"] = {"max_top_level_cells": 16, "tasks_per_cell": 200}
+        # the kernel support (1.83 h_max) must fit in a top-level cell with margin; for CGM
+        # runs use SWIFT_REG_ISOGAL_TOPCELLS = 8 (570 kpc cells) with h_max 150
+        p["Scheduler"] = {"max_top_level_cells": int(os.environ.get("SWIFT_REG_ISOGAL_TOPCELLS", "16")),
+                          "tasks_per_cell": 200}
         p["HernquistPotential"] = {
             "useabspos": 0, "position": [0.0, 0.0, 0.0], "idealizeddisk": 1,
             "M200": 137.0, "h": 0.704, "concentration": 9.0, "diskfraction": 0.040,

@@ -106,7 +106,12 @@ def run(ctx):
         p["Snapshots"]["compression"] = 4
         p["Gravity"].update({"max_physical_DM_softening": SOFTENING,
                              "max_physical_baryon_softening": SOFTENING})
-        p["SPH"].update({"h_min_ratio": 0.1, "h_max": 10.0, "minimal_temperature": 100.0})
+        # h_max 10 kpc (the COLIBRE example value) leaves particles in the hot CGM and in
+        # outflows with too few neighbours; SPHENIX only warns, GIZMO's volume estimate
+        # degenerates and the time-step collapses. SWIFT_REG_ISOGAL_HMAX overrides it.
+        p["SPH"].update({"h_min_ratio": 0.1,
+                         "h_max": float(os.environ.get("SWIFT_REG_ISOGAL_HMAX", "10")),
+                         "minimal_temperature": 100.0})
         p["Scheduler"] = {"max_top_level_cells": 16, "tasks_per_cell": 200}
         p["HernquistPotential"] = {
             "useabspos": 0, "position": [0.0, 0.0, 0.0], "idealizeddisk": 1,

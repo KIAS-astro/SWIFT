@@ -31,11 +31,16 @@ from swiftreg.snapshot import snapshots
 
 DESCRIPTION = "isolated MW-mass disc (M6 or M5): f_kin = 0, 0.1, 1 and COLIBRE Delta T(n)"
 TIER = "long"
+# Hydro scheme from SWIFT_REG_HYDRO (default SPHENIX), as in sn_blast/single_sn_cooling.
+HYDRO = os.environ.get("SWIFT_REG_HYDRO", "sphenix")
 BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-tracers=EAGLE",
                  "--with-entropy-floor=EAGLE", "--with-stars=EAGLE",
                  "--with-star-formation=EAGLE", "--with-black-holes=EAGLE",
                  "--with-ext-potential=hernquist", "--with-number-of-SNII-rays=8",
-                 "--with-feedback=EAGLE-thermal-kinetic"]}
+                 "--with-feedback=EAGLE-thermal-kinetic"]
+                + ([] if HYDRO == "sphenix" else
+                   [f"--with-hydro={HYDRO}"]
+                   + (["--with-riemann-solver=hllc"] if HYDRO.startswith("gizmo") else []))}
 
 # Resolution and run subset from the environment, so that each run can be its
 # own cluster job: SWIFT_REG_ISOGAL_RES = M6 (default, 8e5 Msun, softening 0.4 kpc)

@@ -32,6 +32,33 @@ struct star_formation_xpart_data {
   /*! Star formation rate (internal units) or (if negative) time/scale-factor of
    * last SF episode */
   float SFR;
+
+  /*! PRFM-int state at the last active step (internal units, physical); all
+   * zero if the particle saw no gas on the map */
+
+  /*! Gas surface density Sigma_g */
+  float Sigma_g;
+
+  /*! Stellar surface density Sigma_* */
+  float Sigma_s;
+
+  /*! Stellar vertical velocity dispersion sigma_*z */
+  float sigma_sz;
+
+  /*! Dark matter density rho_d */
+  float rho_d;
+
+  /*! Weight W, the equilibrium midplane pressure */
+  float W;
+
+  /*! Effective velocity dispersion sigma_eff */
+  float sigma_eff;
+
+  /*! Equilibrium midplane density rho_eq = W / sigma_eff^2 */
+  float rho_eq;
+
+  /*! Equilibrium scale height H_g = Sigma_g / (2 rho_eq) */
+  float H_g;
 };
 
 /**

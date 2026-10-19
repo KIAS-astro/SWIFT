@@ -57,7 +57,47 @@ __attribute__((always_inline)) INLINE static int star_formation_write_particles(
       "the last time/scale-factor at which the gas particle was star-forming. "
       "If zero, the particle was never star-forming.");
 
-  return 1;
+  list[1] = io_make_output_field(
+      "PRFMGasSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA, 0.f,
+      xparts, sf_data.Sigma_g,
+      "PRFM gas surface density Sigma_g of the face-on map at the particle, "
+      "at its last active step. Zero if the particle saw no gas on the map.");
+  list[2] = io_make_output_field(
+      "PRFMStellarSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA,
+      0.f, xparts, sf_data.Sigma_s,
+      "PRFM stellar surface density Sigma_* of the face-on map at the "
+      "particle, at its last active step.");
+  list[3] = io_make_output_field(
+      "PRFMStellarVerticalDispersions", FLOAT, 1, UNIT_CONV_VELOCITY, 0.f,
+      xparts, sf_data.sigma_sz,
+      "PRFM stellar vertical velocity dispersion sigma_*z of the face-on map "
+      "at the particle, at its last active step.");
+  list[4] = io_make_output_field(
+      "PRFMDarkMatterDensities", FLOAT, 1, UNIT_CONV_DENSITY, 0.f, xparts,
+      sf_data.rho_d,
+      "PRFM dark matter density rho_d at the particle used in the weight, at "
+      "its last active step.");
+  list[5] = io_make_output_field(
+      "PRFMWeights", FLOAT, 1, UNIT_CONV_PRESSURE, 0.f, xparts, sf_data.W,
+      "PRFM weight W of the gas column (J26 eq. 31), the equilibrium midplane "
+      "pressure, at the particle's last active step.");
+  list[6] = io_make_output_field(
+      "PRFMEffectiveDispersions", FLOAT, 1, UNIT_CONV_VELOCITY, 0.f, xparts,
+      sf_data.sigma_eff,
+      "PRFM effective velocity dispersion sigma_eff(W) of the calibration, at "
+      "the particle's last active step.");
+  list[7] = io_make_output_field(
+      "PRFMEquilibriumDensities", FLOAT, 1, UNIT_CONV_DENSITY, 0.f, xparts,
+      sf_data.rho_eq,
+      "PRFM equilibrium midplane density W / sigma_eff^2 = Sigma_g / (2 H_g) "
+      "(n_H,eq = rho_eq / 1.4 m_H), at the particle's last active step.");
+  list[8] = io_make_output_field(
+      "PRFMEquilibriumScaleHeights", FLOAT, 1, UNIT_CONV_LENGTH, 0.f, xparts,
+      sf_data.H_g,
+      "PRFM equilibrium gas half-thickness H_g = Sigma_g sigma_eff^2 / (2 W) "
+      "(t_dyn = 2 H_g / sigma_eff), at the particle's last active step.");
+
+  return 9;
 }
 
 /**

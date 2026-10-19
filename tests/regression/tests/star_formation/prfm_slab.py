@@ -27,7 +27,12 @@ Two layers, Sigma_g = 50 and 200 Msun/pc^2 (n_H = 2.9 and 11.6 cm^-3), run for
      each particle's rate by a few per cent, so a per-particle check against
      the mean layer is exact only at the start. The time-step is capped at
      2e-5 t_dep so that every particle has computed its SFR by then;
-  3. the fraction of gas particles star-forming is 1.
+  3. the fraction of gas particles star-forming is 1;
+  4. the PRFM state written to the early snapshot: Sigma_g against the layer
+     (1e-3, as check 2), rho_d = 0, sigma_eff = 12 km/s (W/P_0)^0.22 from the
+     written W, rho_eq = W / sigma_eff^2, H_g = Sigma_g / (2 rho_eq) and
+     SFR = m_g W / (Upsilon(W) Sigma_g) from the written fields (1e-5: the
+     fields are stored as float32, relative rounding 6e-8 each).
 """
 
 import os
@@ -164,6 +169,28 @@ def analyze(ctx):
                                    f"W = pi G Sigma_g Sigma_eff / 2, Sigma_eff = Sigma_g + "
                                    f"2 Sigma_*, at t = {early.time_cgs / units.MYR:.3g} "
                                    f"Myr ({early.npart[4]} stars)"))
+        Sg_w = early.read(0, "PRFMGasSurfaceDensities")
+        W_w = early.read(0, "PRFMWeights")
+        sig_w = early.read(0, "PRFMEffectiveDispersions")
+        rho_eq_w = early.read(0, "PRFMEquilibriumDensities")
+        H_w = early.read(0, "PRFMEquilibriumScaleHeights")
+        src = "PRFM state written to the snapshot"
+        checks.append(Check(f"Sigma_g = {S:g}: max |Sigma_g written / layer - 1|",
+                            np.abs(Sg_w / Sg - 1).max(), 1e-3, kind="max",
+                            source=src + "; uniform layer seen by the map"))
+        checks.append(Check(f"Sigma_g = {S:g}: max rho_d written",
+                            early.read(0, "PRFMDarkMatterDensities").max(), 0.0,
+                            kind="equal", source=src + "; use_dark_matter = 0"))
+        x = np.maximum(W_w / (1e4 * units.BOLTZMANN_K), 1.0)
+        for label, got, want in (
+                ("sigma_eff / 12 km/s (W/P_0)^0.22", sig_w, 12 * KMS * x ** 0.22),
+                ("rho_eq / (W / sigma_eff^2)", rho_eq_w, W_w / sig_w ** 2),
+                ("H_g / (Sigma_g / 2 rho_eq)", H_w, Sg_w / (2 * rho_eq_w)),
+                ("SFR / (m_g W / (Upsilon Sigma_g))", sfr,
+                 m * W_w / (upsilon(W_w) * Sg_w))):
+            checks.append(Check(f"Sigma_g = {S:g}: max |{label} - 1|",
+                                np.abs(got / want - 1).max(), 1e-5, kind="max",
+                                source=src + "; float32 fields"))
         ctx.info[name].update({"stars": int(nstar), "expected": expected,
                                "converted_fraction": nstar / n0,
                                "max_rel_sfr": rel.max()})

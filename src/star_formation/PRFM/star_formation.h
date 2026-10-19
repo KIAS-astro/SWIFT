@@ -106,6 +106,9 @@ struct star_formation {
   /*! cgs time to internal units */
   double time_from_cgs;
 
+  /*! cgs pressure and length to internal units */
+  double pressure_from_cgs, length_from_cgs;
+
   /*! The face-on map */
   struct prfm_map_params map;
 
@@ -128,20 +131,46 @@ INLINE static double star_formation_prfm_Zprime(
  * @param p The #part.
  * @param starform The star formation properties.
  * @param state (return) The PRFM state (cgs); unset if Sigma_g = 0.
+ * @param xp (return) If not NULL, the map values and the state are stored
+ * in its sf_data (internal units), or zeroed if Sigma_g = 0.
  * @return 0 if the particle sees no gas on the map, 1 otherwise.
  */
 INLINE static int star_formation_prfm_state(
     const struct part *p, const struct star_formation *starform,
-    struct prfm_state *state) {
+    struct prfm_state *state, struct xpart *xp) {
 
   double Sigma_g, Sigma_s, sigma_sz, rho_d;
   prfm_map_sample(p->x, &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
-  if (Sigma_g <= 0.) return 0;
+  if (Sigma_g <= 0.) {
+    if (xp != NULL) {
+      xp->sf_data.Sigma_g = 0.f;
+      xp->sf_data.Sigma_s = 0.f;
+      xp->sf_data.sigma_sz = 0.f;
+      xp->sf_data.rho_d = 0.f;
+      xp->sf_data.W = 0.f;
+      xp->sf_data.sigma_eff = 0.f;
+      xp->sf_data.rho_eq = 0.f;
+      xp->sf_data.H_g = 0.f;
+    }
+    return 0;
+  }
 
   prfm_int(Sigma_g * starform->Sigma_to_cgs, Sigma_s * starform->Sigma_to_cgs,
            rho_d * starform->rho_to_cgs, sigma_sz * starform->velocity_to_cgs,
            starform->c_d, &starform->cal, star_formation_prfm_Zprime(p, starform),
            starform->n_iter, state);
+
+  if (xp != NULL) {
+    xp->sf_data.Sigma_g = Sigma_g;
+    xp->sf_data.Sigma_s = Sigma_s;
+    xp->sf_data.sigma_sz = sigma_sz;
+    xp->sf_data.rho_d = rho_d;
+    xp->sf_data.W = state->W * starform->pressure_from_cgs;
+    xp->sf_data.sigma_eff = state->sigma_eff / starform->velocity_to_cgs;
+    xp->sf_data.rho_eq = state->W / (state->sigma_eff * state->sigma_eff) /
+                         starform->rho_to_cgs;
+    xp->sf_data.H_g = state->H_g * starform->length_from_cgs;
+  }
   return 1;
 }
 
@@ -173,7 +202,7 @@ INLINE static int star_formation_is_star_forming(
     if (n_H < starform->n_th_H_p_cm3) return 0;
   } else {
     struct prfm_state state;
-    if (!star_formation_prfm_state(p, starform, &state)) return 0;
+    if (!star_formation_prfm_state(p, starform, &state, NULL)) return 0;
     /* Sigma_g / (2 H_g) = W / sigma_eff^2 */
     const double rho_eq_cgs = state.W / (state.sigma_eff * state.sigma_eff);
     const double n_H_eq =
@@ -216,7 +245,7 @@ INLINE static void star_formation_compute_SFR(
   }
 
   struct prfm_state state;
-  if (!star_formation_prfm_state(p, starform, &state)) {
+  if (!star_formation_prfm_state(p, starform, &state, xp)) {
     xp->sf_data.SFR = 0.f;
     return;
   }
@@ -291,6 +320,10 @@ INLINE static int star_formation_number_spart_to_convert(
 INLINE static void star_formation_update_part_not_SFR(
     struct part *p, struct xpart *xp, const struct engine *e,
     const struct star_formation *starform, const int with_cosmology) {
+
+  /* The PRFM state for the snapshots, as for star-forming particles */
+  struct prfm_state state;
+  star_formation_prfm_state(p, starform, &state, xp);
 
   /* Check if it is the first time steps after star formation */
   if (xp->sf_data.SFR > 0.f) {
@@ -482,6 +515,9 @@ INLINE static void starformation_init_backend(
       units_cgs_conversion_factor(us, UNIT_CONV_VELOCITY);
   starform->time_from_cgs =
       1. / units_cgs_conversion_factor(us, UNIT_CONV_TIME);
+  starform->pressure_from_cgs =
+      1. / units_cgs_conversion_factor(us, UNIT_CONV_PRESSURE);
+  starform->length_from_cgs = 1. / length_cgs;
   starform->rho_to_n_H_cgs =
       starform->rho_to_cgs / (1.4 * phys_const->const_proton_mass * mass_cgs);
 
@@ -582,9 +618,8 @@ __attribute__((always_inline)) INLINE static void star_formation_init_part(
 
 /**
  * @brief Sets the star_formation properties of the (x-)particles to a valid
- * start state at the beginning of the simulation after the ICs have been read.
- *
- * Nothing to do here.
+ * start state at the beginning of the simulation after the ICs have been read:
+ * no PRFM state yet.
  *
  * @param phys_const The physical constant in internal units.
  * @param us The unit system.
@@ -598,7 +633,16 @@ star_formation_first_init_part(const struct phys_const *phys_const,
                                const struct unit_system *us,
                                const struct cosmology *cosmo,
                                const struct star_formation *data,
-                               const struct part *p, struct xpart *xp) {}
+                               const struct part *p, struct xpart *xp) {
+  xp->sf_data.Sigma_g = 0.f;
+  xp->sf_data.Sigma_s = 0.f;
+  xp->sf_data.sigma_sz = 0.f;
+  xp->sf_data.rho_d = 0.f;
+  xp->sf_data.W = 0.f;
+  xp->sf_data.sigma_eff = 0.f;
+  xp->sf_data.rho_eq = 0.f;
+  xp->sf_data.H_g = 0.f;
+}
 
 /**
  * @brief Split the star formation content of a particle into n pieces

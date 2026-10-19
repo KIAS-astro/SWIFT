@@ -1,9 +1,13 @@
 """Radiative remnant of one SN in uniform gas with EAGLE cooling (long tier).
 
-10^51 erg in the 32 particles nearest the centre of a 64^3 lattice,
-n_H = 1 cm^-3, T = 10^4 K, solar metallicity, 128 pc box (m_g = 0.30 Msun,
+10^51 erg in the 32 particles nearest the centre of a 64^3 glass (SWIFT's
+glassCube_64), n_H = 1 cm^-3, solar metallicity, 128 pc box (m_g = 0.26 Msun,
 h = 2.5 pc); hydro and EAGLE cooling at z = 0 (Wiersma et al. 2009 tables). The
 entropy floor is lowered to 10 K so that it does not hold up the cooled shell.
+The ambient gas starts at 4400 K, its radiative equilibrium with these tables
+(a run started at 1e4 K cooled to 4.4e3 K within 40 kyr), so P/k = 5.8e3 K cm^-3,
+about twice KO15's ambient pressure. A glass replaces the lattice of the first
+version (2026-10-20), whose grid imprinted 4-fold structure on the shell.
 
 Reference: Kim & Ostriker (2015, KO15), uniform medium, n_0 = 1, solar metallicity,
 values verified against the paper (ai-notes papers-part4-kim-ostriker.md):
@@ -17,8 +21,7 @@ temperature for ionised gas, the temperature of our ambient gas. This test uses 
 true-temperature threshold of 5e4 K (KOR17's 1e5 K in the same convention).
 
 Checks (tolerances: SPH against KO15's grid code, Wiersma+09 cooling with a UV
-background against KO15's cooling, and a warm 1e4 K ambient medium whose pressure
-is about 8 times KO15's):
+background against KO15's cooling, and an ambient pressure about twice KO15's):
   - t_sf from the maximum of M(T > 5e4 K) against 41.9 kyr, within 25 per cent
     (the 10 kyr cadence alone resolves t_sf to 12 per cent);
   - radial momentum at 41.9 kyr against 2.05e5 Msun km/s, within 15 per cent;
@@ -43,7 +46,7 @@ BUILDS = {"eagle": ["--with-subgrid=EAGLE"]}
 N = 64
 BOX = 0.128  # kpc
 NH = 1.0
-T = 1e4
+T = 4.4e3
 DT_SNAP = 1.0226e-5  # internal units, 10.0 kyr
 T_END = 4.6e-4  # 450 kyr
 T_HOT = 5e4
@@ -55,7 +58,9 @@ KO15_P_FINAL = 2.95e5  # Msun km/s, Eq. 29 at n_0 = 1
 
 def run(ctx):
     ctx.table("coolingtables")
-    _, rho0 = c.blast_ics(ctx.path("ics.hdf5"), N, BOX, NH, T)
+    from swiftreg import data
+    glass = data.glass(64, ctx.data_dir, log=ctx.log)
+    _, rho0 = c.blast_ics(ctx.path("ics.hdf5"), N, BOX, NH, T, glass_file=glass)
     ctx.info["rho0"] = rho0
     p = params.eagle_base("ics.hdf5", T_END, ctx.data_dir, DT_SNAP, dt_max=1e-6)
     p["Snapshots"]["compression"] = 4

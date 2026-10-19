@@ -18,18 +18,27 @@ def lattice(n, box_size):
     return np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
 
 
-def uniform_gas(n, box_size_kpc, nH_cgs, T, mu=units.MU_NEUTRAL):
+def glass_positions(glass_file, box_size):
+    """Positions of a SWIFT glass (unit box) scaled to box_size."""
+    with h5py.File(glass_file, "r") as f:
+        return f["PartType0/Coordinates"][:, :] * box_size
+
+
+def uniform_gas(n, box_size_kpc, nH_cgs, T, mu=units.MU_NEUTRAL, glass_file=None):
     """Gas fields for a uniform periodic box on an n^3 lattice.
 
-    Returns a dictionary of arrays in internal units and the gas particle
-    mass in solar masses.
+    With glass_file, positions come from that glass (n is then ignored) instead
+    of the lattice; a glass avoids the grid-aligned structure a lattice imprints
+    on instabilities. Returns a dictionary of arrays in internal units and the
+    gas particle mass in solar masses.
     """
     rho = units.rho_from_nH(nH_cgs) / units.UNIT_DENSITY
-    npart = n ** 3
+    pos = glass_positions(glass_file, box_size_kpc) if glass_file else lattice(n, box_size_kpc)
+    npart = len(pos)
     mass = rho * box_size_kpc ** 3 / npart
     u = units.u_from_T(T, mu) / units.UNIT_ENERGY_PER_MASS
     gas = {
-        "Coordinates": lattice(n, box_size_kpc),
+        "Coordinates": pos,
         "Velocities": np.zeros((npart, 3)),
         "Masses": np.full(npart, mass),
         "SmoothingLength": np.full(npart, 1.2348 * box_size_kpc / n),

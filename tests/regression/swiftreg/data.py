@@ -22,6 +22,21 @@ TABLES = {
 }
 
 
+# Glass initial conditions (SWIFT web storage): unit box, positions and h
+GLASSES = {n: f"{WEB}/ICs/glassCube_{n}.hdf5" for n in (16, 32, 64)}
+
+
+def glass(n, data_dir, log=print):
+    """Path of glassCube_<n>.hdf5 in data_dir, downloaded once."""
+    target = os.path.join(data_dir, f"glassCube_{n}.hdf5")
+    if not os.path.exists(target):
+        os.makedirs(data_dir, exist_ok=True)
+        log(f"  downloading glassCube_{n}")
+        subprocess.run(["curl", "-fsSL", "-o", target + ".part", GLASSES[n]], check=True)
+        os.replace(target + ".part", target)
+    return target
+
+
 def ensure(name, data_dir, log=print):
     """Return the path of table directory `name`, fetching it if needed."""
     url, marker = TABLES[name]

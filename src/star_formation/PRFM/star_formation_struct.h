@@ -36,8 +36,11 @@ struct star_formation_xpart_data {
   /*! PRFM-int state at the last active step (internal units, physical); all
    * zero if the particle saw no gas on the map */
 
-  /*! Gas surface density Sigma_g */
+  /*! Gas surface density Sigma_g used */
   float Sigma_g;
+
+  /*! Gas surface density of the face-on map */
+  float Sigma_g_map;
 
   /*! Stellar surface density Sigma_* */
   float Sigma_s;

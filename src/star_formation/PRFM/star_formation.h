@@ -29,6 +29,7 @@
 #include "equation_of_state.h"
 #include "exp10.h"
 #include "hydro.h"
+#include "kernel_hydro.h"
 #include "parser.h"
 #include "part.h"
 #include "physical_constants.h"
@@ -51,8 +52,11 @@
  * T_max or entropy within a margin of the entropy floor forms stars at
  * mdot = m_g / t_dep, t_dep = Upsilon_tot Sigma_g / W (src/prfm_physics.h).
  * Sigma_g, Sigma_* and sigma_*z come from the face-on map of the isolated
- * disc (src/prfm_map.h), rho_d from the Hernquist potential. Conversion is
- * stochastic as in the EAGLE module: probability SFR dt / m_g per step.
+ * disc (src/prfm_map.h), rho_d from the Hernquist potential. As an option
+ * Sigma_g is instead the kernel column rho_SPH / w(0; H_k) = rho_SPH H_k / 1.4
+ * of the particle (cubic spline of support H_k = gamma_K h), which needs no
+ * disc plane, with an optional bias correction. Conversion is stochastic as
+ * in the EAGLE module: probability SFR dt / m_g per step.
  */
 
 /**
@@ -62,6 +66,23 @@ enum prfm_star_formation_threshold {
   prfm_threshold_measured,   /*<! n_H from the particle's density */
   prfm_threshold_equilibrium /*<! n_H,eq = Sigma_g / (2 H_g 1.4 m_H), and
                                   the measured n_H above a lower floor */
+};
+
+/**
+ * @brief Choice of gas surface density estimator.
+ */
+enum prfm_surface_density_estimator {
+  prfm_sigma_map,          /*<! the face-on map */
+  prfm_sigma_kernel_column /*<! rho_SPH / w(0; H_k) of the particle */
+};
+
+/**
+ * @brief Bias correction of the kernel-column estimate.
+ */
+enum prfm_kernel_column_correction {
+  prfm_kc_correction_none,       /*<! Sigma_est as it is */
+  prfm_kc_correction_constant,   /*<! Sigma_est / f_0 */
+  prfm_kc_correction_equilibrium /*<! Sigma_est / f(H_k / H_g), iterated */
 };
 
 /**
@@ -117,6 +138,18 @@ struct star_formation {
   /*! The face-on map */
   struct prfm_map_params map;
 
+  /*! Gas surface density estimator */
+  enum prfm_surface_density_estimator estimator;
+
+  /*! Bias correction of the kernel-column estimate */
+  enum prfm_kernel_column_correction kc_correction;
+
+  /*! Constant bias f_0 of the kernel-column estimate */
+  double kc_bias;
+
+  /*! Largest number of regula falsi steps of the equilibrium correction */
+  int kc_n_iter;
+
   /*! Number of stars to form per gas particle */
   int num_stars_per_gas_particle;
 };
@@ -131,10 +164,12 @@ INLINE static double star_formation_prfm_Zprime(
 }
 
 /**
- * @brief Evaluate PRFM-int at a particle from the face-on map.
+ * @brief Evaluate PRFM-int at a particle from the face-on map, or with
+ * Sigma_g from the particle's kernel column.
  *
  * @param p The #part.
  * @param starform The star formation properties.
+ * @param cosmo The current cosmological model.
  * @param state (return) The PRFM state (cgs); unset if Sigma_g = 0.
  * @param xp (return) If not NULL, the map values and the state are stored
  * in its sf_data (internal units), or zeroed if Sigma_g = 0.
@@ -142,13 +177,42 @@ INLINE static double star_formation_prfm_Zprime(
  */
 INLINE static int star_formation_prfm_state(
     const struct part *p, const struct star_formation *starform,
-    struct prfm_state *state, struct xpart *xp) {
+    const struct cosmology *cosmo, struct prfm_state *state,
+    struct xpart *xp) {
 
   double Sigma_g, Sigma_s, sigma_sz, rho_d;
   prfm_map_sample(p->x, &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
+  const double Sigma_g_map = Sigma_g;
+  const double Zprime = star_formation_prfm_Zprime(p, starform);
+
+  if (starform->estimator == prfm_sigma_kernel_column) {
+
+    /* Physical density and kernel support (cubic spline: w(0; H) = 1.4 / H) */
+    const double rho = hydro_get_physical_density(p, cosmo);
+    const double H_k = kernel_gamma * p->h * cosmo->a;
+    const double Sigma_est = rho / prfm_kernel_projected(0., H_k);
+
+    if (starform->kc_correction == prfm_kc_correction_equilibrium) {
+      Sigma_g = prfm_kernel_column_equilibrium(
+                    Sigma_est * starform->Sigma_to_cgs,
+                    H_k / starform->length_from_cgs,
+                    Sigma_s * starform->Sigma_to_cgs,
+                    rho_d * starform->rho_to_cgs,
+                    sigma_sz * starform->velocity_to_cgs, starform->c_d,
+                    &starform->cal, Zprime, starform->n_iter,
+                    starform->kc_n_iter, state) /
+                starform->Sigma_to_cgs;
+    } else if (starform->kc_correction == prfm_kc_correction_constant) {
+      Sigma_g = Sigma_est / starform->kc_bias;
+    } else {
+      Sigma_g = Sigma_est;
+    }
+  }
+
   if (Sigma_g <= 0.) {
     if (xp != NULL) {
       xp->sf_data.Sigma_g = 0.f;
+      xp->sf_data.Sigma_g_map = 0.f;
       xp->sf_data.Sigma_s = 0.f;
       xp->sf_data.sigma_sz = 0.f;
       xp->sf_data.rho_d = 0.f;
@@ -160,13 +224,17 @@ INLINE static int star_formation_prfm_state(
     return 0;
   }
 
-  prfm_int(Sigma_g * starform->Sigma_to_cgs, Sigma_s * starform->Sigma_to_cgs,
-           rho_d * starform->rho_to_cgs, sigma_sz * starform->velocity_to_cgs,
-           starform->c_d, &starform->cal, star_formation_prfm_Zprime(p, starform),
-           starform->n_iter, state);
+  /* The equilibrium correction has already evaluated the state */
+  if (starform->estimator == prfm_sigma_map ||
+      starform->kc_correction != prfm_kc_correction_equilibrium)
+    prfm_int(Sigma_g * starform->Sigma_to_cgs,
+             Sigma_s * starform->Sigma_to_cgs, rho_d * starform->rho_to_cgs,
+             sigma_sz * starform->velocity_to_cgs, starform->c_d,
+             &starform->cal, Zprime, starform->n_iter, state);
 
   if (xp != NULL) {
     xp->sf_data.Sigma_g = Sigma_g;
+    xp->sf_data.Sigma_g_map = Sigma_g_map;
     xp->sf_data.Sigma_s = Sigma_s;
     xp->sf_data.sigma_sz = sigma_sz;
     xp->sf_data.rho_d = rho_d;
@@ -208,7 +276,7 @@ INLINE static int star_formation_is_star_forming(
   } else {
     if (n_H < starform->n_floor_H_p_cm3) return 0;
     struct prfm_state state;
-    if (!star_formation_prfm_state(p, starform, &state, NULL)) return 0;
+    if (!star_formation_prfm_state(p, starform, cosmo, &state, NULL)) return 0;
     /* Sigma_g / (2 H_g) = W / sigma_eff^2 */
     const double rho_eq_cgs = state.W / (state.sigma_eff * state.sigma_eff);
     const double n_H_eq =
@@ -251,7 +319,7 @@ INLINE static void star_formation_compute_SFR(
   }
 
   struct prfm_state state;
-  if (!star_formation_prfm_state(p, starform, &state, xp)) {
+  if (!star_formation_prfm_state(p, starform, cosmo, &state, xp)) {
     xp->sf_data.SFR = 0.f;
     return;
   }
@@ -329,7 +397,7 @@ INLINE static void star_formation_update_part_not_SFR(
 
   /* The PRFM state for the snapshots, as for star-forming particles */
   struct prfm_state state;
-  star_formation_prfm_state(p, starform, &state, xp);
+  star_formation_prfm_state(p, starform, e->cosmology, &state, xp);
 
   /* Check if it is the first time steps after star formation */
   if (xp->sf_data.SFR > 0.f) {
@@ -539,6 +607,47 @@ INLINE static void starformation_init_backend(
 
   prfm_map_params_init(&starform->map, parameter_file, phys_const);
 
+  char est[32] = "map";
+  parser_get_opt_param_string(parameter_file,
+                              "PRFMStarFormation:surface_density_estimator",
+                              est, "map");
+  if (strcmp(est, "map") == 0)
+    starform->estimator = prfm_sigma_map;
+  else if (strcmp(est, "kernel_column") == 0)
+    starform->estimator = prfm_sigma_kernel_column;
+  else
+    error(
+        "PRFMStarFormation:surface_density_estimator must be 'map' or "
+        "'kernel_column', got '%s'",
+        est);
+#if !defined(CUBIC_SPLINE_KERNEL)
+  /* prfm_kernel_projected() is the column of the cubic spline */
+  if (starform->estimator == prfm_sigma_kernel_column)
+    error("The PRFM kernel-column estimator needs the cubic spline kernel.");
+#endif
+
+  char corr[32] = "none";
+  parser_get_opt_param_string(parameter_file,
+                              "PRFMStarFormation:kernel_column_correction",
+                              corr, "none");
+  if (strcmp(corr, "none") == 0)
+    starform->kc_correction = prfm_kc_correction_none;
+  else if (strcmp(corr, "constant") == 0)
+    starform->kc_correction = prfm_kc_correction_constant;
+  else if (strcmp(corr, "equilibrium") == 0)
+    starform->kc_correction = prfm_kc_correction_equilibrium;
+  else
+    error(
+        "PRFMStarFormation:kernel_column_correction must be 'none', "
+        "'constant' or 'equilibrium', got '%s'",
+        corr);
+  /* Median Sigma_est / Sigma_g of 1 kpc face-on patches in EAGLE-model H12
+   * discs at 1.6e6, 3.2e6 and 1.3e7 Msun (swift-ism-model figure A35) */
+  starform->kc_bias = parser_get_opt_param_double(
+      parameter_file, "PRFMStarFormation:kernel_column_bias", 0.65);
+  starform->kc_n_iter = parser_get_opt_param_int(
+      parameter_file, "PRFMStarFormation:kernel_column_iterations", 20);
+
   starform->num_stars_per_gas_particle = parser_get_opt_param_int(
       parameter_file, "PRFMStarFormation:num_of_stars_per_gas_particle", 1);
   if (starform->num_stars_per_gas_particle < 1)
@@ -577,6 +686,22 @@ INLINE static void starformation_print_backend(
     message("Equilibrium threshold also requires a measured n_H >= %.3g cm^-3",
             starform->n_floor_H_p_cm3);
   prfm_map_params_print(&starform->map);
+  if (starform->estimator == prfm_sigma_kernel_column) {
+    if (starform->kc_correction == prfm_kc_correction_constant)
+      message(
+          "Sigma_g from the kernel column rho_SPH / w(0; H_k), divided by "
+          "%.4g",
+          starform->kc_bias);
+    else if (starform->kc_correction == prfm_kc_correction_equilibrium)
+      message(
+          "Sigma_g from the kernel column rho_SPH / w(0; H_k), divided by "
+          "f(H_k / H_g) of a sech^2 layer, at most %d regula falsi steps",
+          starform->kc_n_iter);
+    else
+      message("Sigma_g from the kernel column rho_SPH / w(0; H_k)");
+  } else {
+    message("Sigma_g from the face-on map");
+  }
   message("Will form %d stars per gas particle.",
           starform->num_stars_per_gas_particle);
 }
@@ -655,6 +780,7 @@ star_formation_first_init_part(const struct phys_const *phys_const,
                                const struct star_formation *data,
                                const struct part *p, struct xpart *xp) {
   xp->sf_data.Sigma_g = 0.f;
+  xp->sf_data.Sigma_g_map = 0.f;
   xp->sf_data.Sigma_s = 0.f;
   xp->sf_data.sigma_sz = 0.f;
   xp->sf_data.rho_d = 0.f;

@@ -48,6 +48,18 @@
  *    Z'_g = Z'_d and beta_0 = 1): Table 1 Sigma_star, z_*, rho_dm and Table 2
  *    Sigma_gas, Sigma_sp through the weight with the K24 calibration, and
  *    W / Upsilon_tot against Table 2 Sigma_SFR. See the comment there.
+ *
+ * The kernel-column estimate of the gas surface density:
+ *  - w(z; H) of prfm_kernel_projected against 2 pi int_z^H W(r) r dr of the
+ *    build's kernel_eval_double (1e-6; the kernel constants are floats);
+ *  - the bias f(x) of a sech^2 layer against a 10^5-point trapezoid sum
+ *    (1e-6);
+ *  - a uniform slab of half-thickness Z: the SPH density at its midplane,
+ *    rho_0 int 4 pi r^2 W(r) min(1, Z / r) dr from the build's kernel,
+ *    divided by w(0; H), against the exact Sigma_est / Sigma =
+ *    int_-Z^Z w(z; H) dz / (2 Z w(0; H)), H / (2.8 Z) for Z >= H (1e-6);
+ *  - the equilibrium correction returns Sigma_g of a sech^2 layer from its
+ *    estimate f(H_k / H_g) Sigma_g (1e-6).
  */
 
 #include <config.h>
@@ -59,6 +71,8 @@
 #include <math.h>
 #include <stdio.h>
 
+#include "kernel_hydro.h"
+
 /* Units of the Python reference */
 static const double msun = 1.98841e33;
 static const double pc = 3.0856776e18;
@@ -66,6 +80,56 @@ static const double gyr = 3.15576e16;
 static const double kms = 1e5;
 
 static int n_fail = 0;
+
+/* The build's kernel of support H at radius r [1/length^3] */
+static double kernel_W(const double r, const double H) {
+  const double h = H / (double)kernel_gamma;
+  double w;
+  kernel_eval_double(r / h, &w);
+  return w / (h * h * h);
+}
+
+/* Midpoint sum of f over [a, b] with n points */
+static double midpoint(double (*f)(double, const double *), const double *par,
+                       const double a, const double b, const int n) {
+  const double dx = (b - a) / n;
+  double s = 0.;
+  for (int i = 0; i < n; i++) s += f(a + (i + 0.5) * dx, par);
+  return s * dx;
+}
+
+/* 2 pi r W(r; H), par = {H} */
+static double ring(double r, const double *par) {
+  return 2. * M_PI * r * kernel_W(r, par[0]);
+}
+
+/* 4 pi r^2 W(r; H) min(1, Z / r), par = {H, Z} */
+static double slab_shell(double r, const double *par) {
+  const double frac = r > par[1] ? par[1] / r : 1.;
+  return 4. * M_PI * r * r * kernel_W(r, par[0]) * frac;
+}
+
+/* sech^2(u) w(u; x) / w(0; x), par = {x} */
+static double sech2_w(double u, const double *par) {
+  const double c = cosh(u);
+  return prfm_kernel_projected(u, par[0]) / prfm_kernel_projected(0., par[0]) /
+         (c * c);
+}
+
+/* int_0^zeta w(z; 1) dz, exact */
+static double kernel_projected_cumulative(const double zeta) {
+  if (zeta >= 1.) return 0.5;
+  if (zeta < 0.5) {
+    const double z2 = zeta * zeta;
+    return 16. * (0.0875 * zeta - z2 * zeta / 6. + 0.3 * z2 * z2 * zeta -
+                  0.2 * z2 * z2 * z2);
+  }
+  const double y = 1. - zeta;
+  const double y5 = y * y * y * y * y;
+  const double a5 = 1. / 32.;
+  return 16. * (0.0875 * 0.5 - 0.125 / 6. + 0.3 * a5 - 0.2 * a5 * 0.5) +
+         16. * ((a5 / 10. - a5 * 0.5 / 15.) - (y5 / 10. - y5 * y / 15.));
+}
 
 static void check(const char *name, const double measured,
                   const double expected, const double tol) {
@@ -314,6 +378,77 @@ int main(int argc, char *argv[]) {
     }
     check_range("K24 TIGRESS: fraction with |Sigma_SFR error| <= 0.5",
                 n_within / 18., 0.8, 1.);
+  }
+
+  /* Kernel column of the build's kernel */
+  {
+    const double H = 2.7;
+    for (int i = 0; i < 6; i++) {
+      const double q = 0.15 * i + 0.05 * (i == 0 ? -1 : 0);
+      const double z = (q < 0. ? 0. : q) * H;
+      const double par[1] = {H};
+      const double num = midpoint(ring, par, z, H, 200000);
+      char name[80];
+      sprintf(name, "w(z; H) at z / H = %.2f", z / H);
+      check(name, prfm_kernel_projected(z, H), num, 1e-6);
+    }
+    check("w(0; H) H = 1.4", prfm_kernel_projected(0., H) * H, 1.4, 1e-12);
+  }
+
+  /* Bias of a sech^2 layer */
+  {
+    const double xs[6] = {0.5, 1., 2., 2.6, 10., 100.};
+    for (int i = 0; i < 6; i++) {
+      const double par[1] = {xs[i]};
+      const double umax = xs[i] < 40. ? xs[i] : 40.;
+      const double num = midpoint(sech2_w, par, 0., umax, 100000);
+      char name[80];
+      sprintf(name, "f(H_k / H = %g)", xs[i]);
+      check(name, prfm_kernel_column_bias(xs[i]), num, 1e-6);
+    }
+  }
+
+  /* Uniform slab of half-thickness Z: Sigma_est / Sigma */
+  {
+    const double H = 1.3;
+    const double zs[7] = {1e-3, 0.1, 0.25, 0.5, 0.75, 1., 2.};
+    for (int i = 0; i < 7; i++) {
+      const double Z = zs[i] * H;
+      const double par[2] = {H, Z};
+      const double rho_sph = midpoint(slab_shell, par, 0., H, 400000);
+      const double ratio = rho_sph / prfm_kernel_projected(0., H) / (2. * Z);
+      const double exact =
+          2. * kernel_projected_cumulative(zs[i]) / (2. * zs[i] * 1.4);
+      char name[80];
+      sprintf(name, "slab Z / H_k = %g: Sigma_est / Sigma", zs[i]);
+      check(name, ratio, exact, 1e-6);
+      if (zs[i] >= 1.) {
+        sprintf(name, "slab Z / H_k = %g: H_k / (2.8 Z)", zs[i]);
+        check(name, ratio, 1. / (2.8 * zs[i]), 1e-6);
+      }
+      if (zs[i] < 0.01) check("thin slab: Sigma_est / Sigma", ratio, 1., 1e-5);
+    }
+  }
+
+  /* Equilibrium correction recovers the layer */
+  {
+    const double Sg = 20. * Sigma_unit;
+    const double rho_d = 0.01 * rho_unit;
+    const double xs[6] = {1.5, 3., 10., 1.2, 3., 10.};
+    for (int i = 0; i < 6; i++) {
+      /* Star dominated, then gas only */
+      const double Ss = i < 3 ? 50. * Sigma_unit : 0.;
+      struct prfm_state st;
+      prfm_int(Sg, Ss, rho_d, -1., c_d, &ok22, 1., 5, &st);
+      const double H_k = xs[i] * st.H_g;
+      const double Sest = prfm_kernel_column_bias(xs[i]) * Sg;
+      const double got = prfm_kernel_column_equilibrium(
+          Sest, H_k, Ss, rho_d, -1., c_d, &ok22, 1., 5, 20, &st);
+      char name[80];
+      sprintf(name, "equilibrium correction, Sigma_* = %g, H_k / H_g = %g",
+              Ss / Sigma_unit, xs[i]);
+      check(name, got, Sg, 1e-6);
+    }
   }
 
   if (n_fail) {

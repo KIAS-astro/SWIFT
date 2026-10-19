@@ -60,8 +60,15 @@ __attribute__((always_inline)) INLINE static int star_formation_write_particles(
   list[1] = io_make_output_field(
       "PRFMGasSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA, 0.f,
       xparts, sf_data.Sigma_g,
+      "PRFM gas surface density Sigma_g used at the particle's last active "
+      "step: of the face-on map, or of the kernel column with its "
+      "correction. Zero if the particle saw no gas on the map (map "
+      "estimator).");
+  list[9] = io_make_output_field(
+      "PRFMMapGasSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA,
+      0.f, xparts, sf_data.Sigma_g_map,
       "PRFM gas surface density Sigma_g of the face-on map at the particle, "
-      "at its last active step. Zero if the particle saw no gas on the map.");
+      "at its last active step, whichever estimator is used.");
   list[2] = io_make_output_field(
       "PRFMStellarSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA,
       0.f, xparts, sf_data.Sigma_s,
@@ -97,7 +104,7 @@ __attribute__((always_inline)) INLINE static int star_formation_write_particles(
       "PRFM equilibrium gas half-thickness H_g = Sigma_g sigma_eff^2 / (2 W) "
       "(t_dyn = 2 H_g / sigma_eff), at the particle's last active step.");
 
-  return 9;
+  return 10;
 }
 
 /**

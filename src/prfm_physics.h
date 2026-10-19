@@ -282,4 +282,115 @@ static inline void prfm_int(const double Sigma_g, const double Sigma_s,
   out->t_dep = prfm_upsilon(W, cal, Zprime) * Sigma_g / W;
 }
 
+/**
+ * @brief Column of the cubic spline (M4) kernel of compact support H through
+ * a line at height z above its centre, per unit density:
+ * w(z; H) = 2 pi int_|z|^H W(r) r dr, W(r) = 8 / (pi H^3) k(r / H), with
+ * k(q) = 1 - 6 q^2 + 6 q^3 (q < 1/2), 2 (1 - q)^3 (1/2 <= q < 1).
+ * w(0; H) = 1.4 / H.
+ *
+ * @param z Height above the kernel centre (any length unit).
+ * @param H Kernel support, same unit.
+ * @return w(z; H) in inverse length units.
+ */
+static inline double prfm_kernel_projected(const double z, const double H) {
+  const double q = fabs(z) / H;
+  if (q >= 1.) return 0.;
+  if (q < 0.5) {
+    const double q2 = q * q;
+    return 16. / H * (0.0875 - 0.5 * q2 + 1.5 * q2 * q2 - 1.2 * q2 * q2 * q);
+  }
+  const double y = 1. - q;
+  const double y4 = y * y * y * y;
+  return 16. / H * (0.5 * y4 - 0.4 * y4 * y);
+}
+
+/**
+ * @brief Kernel-column bias f(x) of a sech^2 layer: the estimate
+ * rho_SPH(0) / w(0; H_k) of a layer rho_0 sech^2(z / H), Sigma = 2 rho_0 H,
+ * is f(H_k / H) Sigma, with
+ * f(x) = int_0^inf sech^2(u) w(u; x) du / w(0; x) (lengths in units of H).
+ * Simpson's rule with 128 intervals over u in [0, min(x, 20)]
+ * (sech^2(20) = 2e-17).
+ *
+ * @param x Kernel support over layer half-thickness, H_k / H > 0.
+ */
+static inline double prfm_kernel_column_bias(const double x) {
+  const int n = 128;
+  const double umax = x < 20. ? x : 20.;
+  const double du = umax / n;
+  double sum = 0.;
+  for (int i = 0; i <= n; i++) {
+    const double u = i * du;
+    const double c = cosh(u);
+    const double wgt = (i == 0 || i == n) ? 1. : (i % 2 ? 4. : 2.);
+    sum += wgt * prfm_kernel_projected(u, x) / (c * c);
+  }
+  return sum * du / 3. / prfm_kernel_projected(0., x);
+}
+
+/**
+ * @brief Residual ln Sigma_g - ln Sigma_est + ln f(H_k / H_g(Sigma_g)) of the
+ * equilibrium correction, with H_k / H_g held at >= 1. Fills @p out.
+ */
+static inline double prfm_kernel_column_residual(
+    const double lnSigma, const double lnSigma_est, const double H_k,
+    const double Sigma_s, const double rho_d, const double sigma_sz,
+    const double c_d, const struct prfm_calibration *cal, const double Zprime,
+    const int n_iter, struct prfm_state *out) {
+  prfm_int(exp(lnSigma), Sigma_s, rho_d, sigma_sz, c_d, cal, Zprime, n_iter,
+           out);
+  const double x = H_k / out->H_g;
+  return lnSigma - lnSigma_est + log(prfm_kernel_column_bias(x > 1. ? x : 1.));
+}
+
+/**
+ * @brief Gas surface density from the kernel-column estimate, corrected for
+ * the thickness of the PRFM-int equilibrium layer.
+ *
+ * Solves Sigma_g = Sigma_est / f(H_k / H_g(Sigma_g)), with H_g from
+ * prfm_int() and f from prfm_kernel_column_bias(). H_k / H_g is held at >= 1
+ * (f >= f(1) = 0.33): below that the kernel lies inside the layer and the
+ * estimate is a volume density, which the correction does not describe. The
+ * residual of prfm_kernel_column_residual() increases with Sigma_g, is < 0 at
+ * Sigma_est and >= 0 at Sigma_est / f(1), so the root is bracketed; it is
+ * found in ln Sigma_g by regula falsi (Illinois), to 1e-7 in the residual.
+ *
+ * @param Sigma_est Uncorrected estimate rho_SPH / w(0; H_k) [g cm^-2].
+ * @param H_k Kernel support [cm].
+ * @param n_corr Largest number of regula falsi steps.
+ * Other parameters and @p out as prfm_int(); @p out is the state at the
+ * returned Sigma_g.
+ * @return The corrected Sigma_g [g cm^-2].
+ */
+static inline double prfm_kernel_column_equilibrium(
+    const double Sigma_est, const double H_k, const double Sigma_s,
+    const double rho_d, const double sigma_sz, const double c_d,
+    const struct prfm_calibration *cal, const double Zprime, const int n_iter,
+    const int n_corr, struct prfm_state *out) {
+  const double l0 = log(Sigma_est);
+  double a = l0;
+  double ga = prfm_kernel_column_residual(a, l0, H_k, Sigma_s, rho_d, sigma_sz,
+                                          c_d, cal, Zprime, n_iter, out);
+  double b = l0 - log(prfm_kernel_column_bias(1.));
+  double gb = prfm_kernel_column_residual(b, l0, H_k, Sigma_s, rho_d, sigma_sz,
+                                          c_d, cal, Zprime, n_iter, out);
+  if (gb <= 0.) return exp(b);
+  for (int i = 0; i < n_corr; i++) {
+    const double c = (a * gb - b * ga) / (gb - ga);
+    const double gc = prfm_kernel_column_residual(
+        c, l0, H_k, Sigma_s, rho_d, sigma_sz, c_d, cal, Zprime, n_iter, out);
+    if (gc * gb < 0.) {
+      a = b;
+      ga = gb;
+    } else {
+      ga *= 0.5;
+    }
+    b = c;
+    gb = gc;
+    if (fabs(gc) < 1e-7) break;
+  }
+  return exp(b);
+}
+
 #endif /* SWIFT_PRFM_PHYSICS_H */

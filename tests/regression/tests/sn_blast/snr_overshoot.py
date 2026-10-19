@@ -13,10 +13,12 @@ SWIFT-star-formation/papers-part12-hopkins.md Sec. 2.3, tests 1 and 3):
   diff2  cooling, SPHENIX artificial conduction doubled (diffusion_alpha_max and
          diffusion_beta both 2: alpha_diff is capped by alpha_max and grows at a
          rate proportional to beta, so both bounds double);
-  adiab0 no cooling, SPHENIX artificial conduction off.
+  adiab0 no cooling, SPHENIX artificial conduction off;
+  visc05, visc2  cooling, SPHENIX viscosity_alpha_max halved (1) and doubled (4);
+  adiab_visc05, adiab_visc2  the same without cooling.
 
-SWIFT_REG_SNR_VARIANTS selects a comma-separated subset (default: all five for
-SPHENIX; diff0, diff2 and adiab0 need SPHENIX). Outputs are log-spaced from 2 kyr to 1.5 Myr
+SWIFT_REG_SNR_VARIANTS selects a comma-separated subset (default: all for SPHENIX;
+the diffusion and viscosity variants need SPHENIX). Outputs are log-spaced from 2 kyr to 1.5 Myr
 so that the early, pre-shell-formation phase is sampled.
 
 Checks: the adiabatic momentum at 0.1 Myr within 10 per cent of the Sedov-Taylor
@@ -41,7 +43,10 @@ T_END = 1.5339e-3  # 1.5 Myr
 VARIANTS = {"cool": {}, "adiab": {},
             "diff0": {"diffusion_alpha_max": 0.0},
             "diff2": {"diffusion_alpha_max": 2.0, "diffusion_beta": 2.0},
-            "adiab0": {"diffusion_alpha_max": 0.0}}
+            "adiab0": {"diffusion_alpha_max": 0.0},
+            "visc05": {"viscosity_alpha_max": 1.0}, "visc2": {"viscosity_alpha_max": 4.0},
+            "adiab_visc05": {"viscosity_alpha_max": 1.0},
+            "adiab_visc2": {"viscosity_alpha_max": 4.0}}
 _only = os.environ.get("SWIFT_REG_SNR_VARIANTS")
 RUNS = {k: v for k, v in VARIANTS.items() if not _only or k in _only.split(",")}
 

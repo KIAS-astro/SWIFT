@@ -491,6 +491,7 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
 
           /* Time-step size for this particle */
           double dt_star;
+          int wind_phase = 0;
           if (with_cosmology) {
             const integertime_t ti_step = get_integer_timestep(p->time_bin);
             const integertime_t ti_begin =
@@ -660,11 +661,13 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
 
             } /* while n_spart_to_create > 0 */
 
-          } else if (wind_should_launch(p, xp, e->wind_props, ti_current,
-                                        dt_star)) {
+          } else if ((wind_phase = wind_should_launch(
+                          p, xp, e->wind_props, ti_current, dt_star))) {
 
-            /* Launch the particle as a decoupled wind particle */
-            wind_launch(p, xp, e->wind_props, cosmo, e->time, ti_current);
+            /* Launch the particle as a decoupled wind particle of the phase
+             * drawn */
+            wind_launch(p, xp, e->wind_props, cosmo, e->time, ti_current,
+                        wind_phase);
 
             /* It no longer forms stars */
             star_formation_update_part_not_SFR(p, xp, e, sf_props,

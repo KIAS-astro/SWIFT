@@ -731,7 +731,7 @@ void runner_do_timestep(struct runner *r, struct cell *c, const int timer) {
          * step, so that its neighbours are woken by the limiter. */
         int recoupled = 0;
         if (part_is_decoupled(p) &&
-            wind_should_recouple(p, e->wind_props, e->time)) {
+            wind_should_recouple(p, xp, e->wind_props, e->time)) {
           wind_recouple(p, xp, e->wind_props, cosmo, e->time);
           recoupled = 1;
         }

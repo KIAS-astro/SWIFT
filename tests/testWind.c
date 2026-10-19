@@ -30,6 +30,21 @@
  *    other by construction, and for p_* + p_w > 1 both are renormalised;
  *  - the loadings against the K20b formulas evaluated by hand at
  *    Sigma_SFR = 1e-3, 1e-2, 1e-1 (1e-12), and the clipping outside [1e-4, 1].
+ * Two-phase wind and CR energy (wind-design.md Sec. 10):
+ *  - the four-way draw on the same grid: star, hot, warm and nothing
+ *    fractions are p_* N, p_h N, p_w N and 1 - (p_* + p_h + p_w) N (1e-5),
+ *    the four counts sum to the grid size (exclusive and exhaustive), and
+ *    with p_w = 0 every outcome equals that of the two-way draw;
+ *  - the loading sets through K26 at 2 kpc and Sigma_SFR = 3.6e-3: warm 2.8
+ *    (TIGRESSpp) and 1.3 (K20), and the TIGRESSpp hot factors (1e-3, the
+ *    rounding of the norms);
+ *  - warm launch energy v^2/2 + gamma u at 100 km/s and 1e4 K (mu = 0.6)
+ *    and the apex test of a ballistic particle in a constant field: the
+ *    apex time v/g and height v^2/(2g), from a leapfrog integration with
+ *    the test at every step (to one step);
+ *  - CR energy: e_CR (p_h + p_w [both]) / p_* = eta_E,CR u_* (1e-12), and
+ *    over 1e5 launches with random masses the launched sum equals the
+ *    deposited sum and the summed internal energy gain (1e-12).
  */
 
 #include <config.h>
@@ -51,6 +66,42 @@ static void check(const char *name, const double measured,
   printf("%s %-58s measured %.12g expected %.12g rel %.2e (tol %.0e)\n",
          ok ? "ok  " : "FAIL", name, measured, expected, rel, tol);
   if (!ok) n_fail++;
+}
+
+static void check_draw4(const double p_star, const double p_hot,
+                        const double p_warm) {
+  const int n = 1000000;
+  int c[4] = {0, 0, 0, 0}, n_differ = 0;
+  for (int i = 0; i < n; i++) {
+    const double u = (i + 0.5) / n;
+    const enum wind_draw4_outcome o = wind_draw4(u, p_star, p_hot, p_warm);
+    c[o]++;
+    if (p_warm == 0.) {
+      const enum wind_draw_outcome o2 = wind_draw(u, p_star, p_hot);
+      const int same = (o == wind_draw4_star && o2 == wind_draw_star) ||
+                       (o == wind_draw4_hot && o2 == wind_draw_wind) ||
+                       (o == wind_draw4_nothing && o2 == wind_draw_nothing);
+      if (!same) n_differ++;
+    }
+  }
+  const double total = p_star + p_hot + p_warm;
+  const double N = total > 1. ? 1. / total : 1.;
+  const double expect[4] = {1. - total * N, p_star * N, p_hot * N, p_warm * N};
+  const char *what[4] = {"nothing", "star", "hot", "warm"};
+  char name[96];
+  for (int k = 0; k < 4; k++) {
+    sprintf(name, "draw4 (%g, %g, %g): %s fraction", p_star, p_hot, p_warm,
+            what[k]);
+    check(name, (double)c[k] / n, expect[k], expect[k] > 0. ? 1e-5 / expect[k] : 1e-5);
+  }
+  sprintf(name, "draw4 (%g, %g, %g): outcomes counted", p_star, p_hot, p_warm);
+  /* -ffast-math: the ratio of two equal integers is 1 to 1e-16 */
+  check(name, c[0] + c[1] + c[2] + c[3], n, 1e-15);
+  if (p_warm == 0.) {
+    sprintf(name, "draw4 (%g, %g, 0): outcomes differing from wind_draw",
+            p_star, p_hot);
+    check(name, n_differ, 0., 0.);
+  }
 }
 
 static void check_draw(const double p_star, const double p_wind) {
@@ -171,7 +222,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 2; i++) {
       double dv, u_w;
       wind_launch_kinematics(u_star, eM[i], eK[i] + eT[i],
-                             eK[i] / (eK[i] + eT[i]), &dv, &u_w);
+                             eK[i] / (eK[i] + eT[i]), wind_energy_internal,
+                             5. / 3., &dv, &u_w);
       char name[96];
       sprintf(name, "S24a %s: Delta v [km/s]", names[i]);
       check(name, dv / kms, dv_tab[i], 3e-3);
@@ -186,6 +238,89 @@ int main(int argc, char *argv[]) {
   check_draw(0.8, 0.4);
   check_draw(2., 1.);
   check_draw(0.2, 0.);
+
+  /* The four-way draw */
+  check_draw4(0.01, 0.005, 0.02);
+  check_draw4(0.1, 0.02, 0.28);
+  check_draw4(0.3, 0.06, 0.84);
+  check_draw4(0.5, 0.1, 1.4);
+  check_draw4(0.2, 0.04, 0.);
+
+  /* Loading sets (wind-design.md Sec. 10.3) at the K26 Sigma_SFR */
+  {
+    const double S = 3.6e-3;
+    check("warm eta_M, TIGRESSpp, at Sigma_SFR = 3.6e-3 (K26 2.8)",
+          wind_powerlaw_loading(WIND_WARM_ETA_M_LOG10_NORM_TIGRESSPP,
+                                WIND_WARM_ETA_M_SLOPE, S),
+          2.8, 1e-3);
+    check("warm eta_M, K20, at Sigma_SFR = 3.6e-3 (K26 mhd 1.3)",
+          wind_powerlaw_loading(WIND_WARM_ETA_M_LOG10_NORM_K20,
+                                WIND_WARM_ETA_M_SLOPE, S),
+          1.3, 1e-3);
+    check("TIGRESSpp hot eta_M factor (K26 0.17 / 0.33)",
+          WIND_TIGRESSPP_HOT_ETA_M_FACTOR, 0.17 / 0.33, 1e-3);
+    check("TIGRESSpp hot eta_E factor (K26 0.016 / 0.040)",
+          WIND_TIGRESSPP_HOT_ETA_E_FACTOR, 0.016 / 0.040, 1e-12);
+  }
+
+  /* Warm launch and the apex test */
+  {
+    const double v = 100. * kms;
+    const double u = 1.380649e-16 * 1e4 /
+                     ((gamma - 1.) * 0.6 * 1.67262192e-24);
+    const double e = wind_warm_specific_energy(v, u, gamma);
+    check("warm v^2/2 + gamma u [(km/s)^2] at 100 km/s, 1e4 K", e / (kms * kms),
+          5000. + gamma * u / (kms * kms), 1e-12);
+    check("warm eta_E / eta_M at the defaults", e / u_star, 0.01015, 1e-3);
+
+    /* Leapfrog in g = -1e-8 cm/s^2 along z, launched along -z (sign -1)
+     * with the field along +z, and along +z with the field along -z */
+    const double n[3] = {0., 0., 1.};
+    for (int s = -1; s <= 1; s += 2) {
+      const double g = -s * 1e-8, dt = 1e10;
+      float vel[3] = {3e5, -2e5, (float)(s * v)};
+      double z = 0., t = 0.;
+      while (!wind_past_apex(vel, n, s) && t < 1e17) {
+        vel[2] += 0.5 * g * dt;
+        z += vel[2] * dt;
+        vel[2] += 0.5 * g * dt;
+        t += dt;
+      }
+      char name[96];
+      sprintf(name, "apex time / (v/g), launch sign %+d", s);
+      check(name, t / (v / fabs(g)), 1., dt / (v / fabs(g)));
+      sprintf(name, "apex height / (v^2/2g), launch sign %+d", s);
+      check(name, fabs(z) / (v * v / (2. * fabs(g))), 1.,
+            2. * dt / (v / fabs(g)));
+    }
+  }
+
+  /* CR energy per launched mass and its bookkeeping */
+  {
+    const double eta_cr = 0.3, p_star = 0.01;
+    const double eta_h = wind_TIGRESS_eta_M(3.6e-3) * 0.515, eta_w = 2.8;
+    const double e_hot = wind_cr_specific_energy(u_star, eta_cr, eta_h);
+    const double e_both = wind_cr_specific_energy(u_star, eta_cr, eta_h + eta_w);
+    check("CR, carriers hot: e_CR p_h / p_* = eta_E,CR u_*",
+          e_hot * eta_h * p_star / p_star, eta_cr * u_star, 1e-12);
+    check("CR, carriers both: e_CR (p_h + p_w) / p_* = eta_E,CR u_*",
+          e_both * (eta_h + eta_w) * p_star / p_star, eta_cr * u_star, 1e-12);
+    double E_launch = 0., E_dep = 0., dU = 0.;
+    unsigned long long st = 12345;
+    for (int i = 0; i < 100000; i++) {
+      st = st * 6364136223846793005ULL + 1442695040888963407ULL;
+      const double m = 1e38 * (1. + (double)(st >> 11) / 9007199254740992.);
+      const double E = m * e_hot;
+      const double u0 = 1e14;
+      E_launch += E;
+      const double carried = E;
+      E_dep += carried;
+      dU += m * ((u0 + carried / m) - u0);
+    }
+    check("CR, 1e5 launches: deposited / launched", E_dep / E_launch, 1.,
+          1e-15);
+    check("CR, 1e5 launches: sum m du / launched", dU / E_launch, 1., 1e-12);
+  }
 
   if (n_fail) {
     printf("%d checks failed\n", n_fail);

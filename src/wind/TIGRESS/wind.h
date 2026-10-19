@@ -91,6 +91,19 @@ INLINE static void wind_loadings(const struct wind_props *props,
 }
 
 /**
+ * @brief Mass loading of the warm channel (wind-design.md Sec. 10.3): the
+ * constant Wind:warm_eta_M if positive, else 10^norm Sigma_SFR^slope; 0 if
+ * the warm channel is off.
+ */
+INLINE static double wind_warm_eta_M(const struct wind_props *props,
+                                     const struct xpart *xp) {
+  if (!props->warm_phase || props->model == wind_loading_none) return 0.;
+  if (props->warm_eta_M > 0.) return props->warm_eta_M;
+  return wind_powerlaw_loading(props->warm_eta_M_log10_norm,
+                               props->warm_eta_M_slope, xp->sf_data.Sigma_SFR);
+}
+
+/**
  * @brief Recoupling distance of a particle launched now: at least
  * d_rec_kernel_factor kernel supports, so that it leaves its launch kernel.
  */
@@ -125,6 +138,32 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
   p->wind_data.launch_count = 0;
   p->wind_data.decoupled = decoupled ? 1 : 0;
+  p->wind_data.launch_Sigma_SFR = -1.f;
+  p->wind_data.launch_eta_M = -1.f;
+
+  /* WindPhases and WindCREnergies are read from the ICs only for particles
+   * decoupled there; a hand-decoupled particle without a phase is hot */
+  if (!decoupled) {
+    p->wind_data.phase = 0;
+    p->wind_data.cr_energy = 0.;
+  } else if (p->wind_data.phase != 2) {
+    p->wind_data.phase = 1;
+  }
+  if (decoupled) {
+    /* The launch direction of a hand-decoupled particle is the sign of its
+     * initial velocity along n */
+    const double vn = xp->v_full[0] * props->normal[0] +
+                      xp->v_full[1] * props->normal[1] +
+                      xp->v_full[2] * props->normal[2];
+    p->wind_data.launch_sign = vn < 0. ? -1 : 1;
+    if (p->wind_data.phase == 2)
+      p->wind_data.d_rec =
+          fmax(props->warm_d_rec,
+               props->d_rec_kernel_factor * kernel_gamma * p->h);
+    atomic_add_d(&wind_global_stats.E_cr_launch, p->wind_data.cr_energy);
+  } else {
+    p->wind_data.launch_sign = 1;
+  }
 
   if (decoupled) {
     p->wind_data.launch_time = time;
@@ -146,21 +185,26 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
  * @param xp The #xpart.
  * @param p_star Probability of forming a star in this step.
  * @param u The uniform number of the star formation draw.
- * @return 1 for a star, 2 for a launch, 0 otherwise.
+ * @return 1 for a star, 2 for a hot launch, 3 for a warm launch, 0
+ * otherwise (enum wind_draw4_outcome).
  */
 __attribute__((always_inline)) INLINE static int wind_star_formation_draw(
     const struct wind_props *props, const struct part *p,
     const struct xpart *xp, const double p_star, const double u) {
   double eta_M, eta_E;
   wind_loadings(props, xp, &eta_M, &eta_E);
-  return wind_draw(u, p_star, eta_M * p_star);
+  return wind_draw4(u, p_star, eta_M * p_star,
+                    wind_warm_eta_M(props, xp) * p_star);
 }
 
 /**
- * @brief Should a star-forming particle that did not form a star launch?
+ * @brief Should a star-forming particle that did not form a star launch,
+ * and in which phase?
  *
  * Repeats the draw of the star formation module with the same uniform
- * number, so that star and wind exclude each other.
+ * number, so that star and the two wind phases exclude each other.
+ *
+ * @return 0 for no launch, 1 for hot, 2 for warm.
  */
 INLINE static int wind_should_launch(const struct part *p,
                                      const struct xpart *xp,
@@ -172,22 +216,46 @@ INLINE static int wind_should_launch(const struct part *p,
   const double p_star = xp->sf_data.SFR * dt_star / hydro_get_mass(p);
   const double u =
       random_unit_interval(p->id, ti_current, random_number_star_formation);
-  return wind_star_formation_draw(props, p, xp, p_star, u) == wind_draw_wind;
+  const int o = wind_star_formation_draw(props, p, xp, p_star, u);
+  if (o == wind_draw4_hot) return 1;
+  if (o == wind_draw4_warm) return 2;
+  return 0;
 }
 
 /**
- * @brief Launch a particle (WD3): kick along +-n, set u = u_w, decouple.
+ * @brief Launch a particle: kick along +-n, set its internal energy,
+ * give it its CR energy, decouple (WD3; warm phase and CR energy:
+ * wind-design.md Sec. 10).
+ *
+ * @param phase 1 hot (kick and u_w from eta_M,hot and eta_E,hot), 2 warm
+ * (kick warm_v, u = warm_u).
  */
 INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                const struct wind_props *props,
                                const struct cosmology *cosmo,
                                const double time,
-                               const integertime_t ti_current) {
+                               const integertime_t ti_current,
+                               const int phase) {
 
   double eta_M, eta_E, dv, u_w;
   wind_loadings(props, xp, &eta_M, &eta_E);
-  wind_launch_kinematics(props->u_star, eta_M, eta_E, props->f_kin,
-                         props->energy_convention, hydro_gamma, &dv, &u_w);
+  const double eta_M_warm = wind_warm_eta_M(props, xp);
+  if (phase == 2) {
+    dv = props->warm_v;
+    u_w = props->warm_u;
+  } else {
+    wind_launch_kinematics(props->u_star, eta_M, eta_E, props->f_kin,
+                           props->energy_convention, hydro_gamma, &dv, &u_w);
+  }
+
+  /* CR energy: eta_E,CR u_* per stellar mass in expectation, shared by the
+   * carrying phases */
+  double E_cr = 0.;
+  if (props->cr_eta_E > 0. && (phase == 1 || props->cr_carriers_both)) {
+    const double eta_carry = eta_M + (props->cr_carriers_both ? eta_M_warm : 0.);
+    E_cr = hydro_get_mass(p) *
+           wind_cr_specific_energy(props->u_star, props->cr_eta_E, eta_carry);
+  }
 
   const double sign =
       random_unit_interval(p->id, ti_current, random_number_wind_direction) <
@@ -216,13 +284,29 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   }
   p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
   p->wind_data.launch_e_th = xp->u_full;
-  p->wind_data.d_rec = wind_recoupling_distance(p, props);
+  p->wind_data.d_rec =
+      phase == 2 ? fmax(props->warm_d_rec,
+                        props->d_rec_kernel_factor * kernel_gamma * p->h)
+                 : wind_recoupling_distance(p, props);
+  p->wind_data.phase = phase;
+  p->wind_data.launch_sign = sign < 0. ? -1 : 1;
+  p->wind_data.cr_energy = E_cr;
+  p->wind_data.launch_Sigma_SFR = xp->sf_data.Sigma_SFR;
+  p->wind_data.launch_eta_M = phase == 2 ? eta_M_warm : eta_M;
 
   const double m = hydro_get_mass(p);
   atomic_add_d(&wind_global_stats.n_launch, 1.);
   atomic_add_d(&wind_global_stats.m_launch, m);
   atomic_add_d(&wind_global_stats.E_kin_launch, m * p->wind_data.launch_e_kin);
   atomic_add_d(&wind_global_stats.E_th_launch, m * p->wind_data.launch_e_th);
+  if (phase == 2) {
+    atomic_add_d(&wind_global_stats.n_launch_warm, 1.);
+    atomic_add_d(&wind_global_stats.m_launch_warm, m);
+  } else {
+    atomic_add_d(&wind_global_stats.n_launch_hot, 1.);
+    atomic_add_d(&wind_global_stats.m_launch_hot, m);
+  }
+  atomic_add_d(&wind_global_stats.E_cr_launch, E_cr);
 }
 
 /**
@@ -235,24 +319,35 @@ __attribute__((always_inline)) INLINE static double wind_distance(
 }
 
 /**
- * @brief Should a decoupled particle recouple (WD5)?
+ * @brief Should a decoupled particle recouple (WD5)? A warm particle also
+ * recouples at its apex (wind-design.md Sec. 10.3).
  */
 INLINE static int wind_should_recouple(const struct part *p,
+                                       const struct xpart *xp,
                                        const struct wind_props *props,
                                        const double time) {
   if (!p->wind_data.decoupled) return 0;
+  if (p->wind_data.phase == 2 &&
+      wind_past_apex(xp->v_full, props->normal, p->wind_data.launch_sign))
+    return 1;
   return wind_distance(p) >= p->wind_data.d_rec ||
          time - p->wind_data.launch_time >= props->t_rec;
 }
 
 /**
  * @brief Recouple a particle (WD6): it keeps its velocity and internal
- * energy; record them.
+ * energy, to which its CR energy is added as heat if Wind:cr_deposit is
+ * thermal; record them. The recorded internal energy is the one before the
+ * deposit.
  */
 INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                                  const struct wind_props *props,
                                  const struct cosmology *cosmo,
                                  const double time) {
+
+  if (p->wind_data.phase == 2 &&
+      wind_past_apex(xp->v_full, props->normal, p->wind_data.launch_sign))
+    atomic_add_d(&wind_global_stats.n_recouple_apex, 1.);
 
   p->wind_data.decoupled = 0;
   p->wind_data.recouple_time = time;
@@ -261,12 +356,27 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
   p->wind_data.recouple_e_th = xp->u_full;
   hydro_reset_acceleration(p);
 
-  /* The signal velocity of the first CFL time-step must know that the
-   * particle arrives at its speed in gas that is, to first order, at rest */
-  hydro_set_v_sig_based_on_velocity_kick(
-      p, cosmo, sqrtf(2.f * p->wind_data.recouple_e_kin));
-
   const double m = hydro_get_mass(p);
+  const double E_cr = p->wind_data.cr_energy;
+  float cs_new = 0.f;
+  if (E_cr > 0.) {
+    atomic_add_d(&wind_global_stats.E_cr_release, E_cr);
+    if (props->cr_deposit_thermal) {
+      const double u_new = xp->u_full + E_cr / m;
+      hydro_set_physical_internal_energy(p, xp, cosmo, u_new);
+      hydro_set_drifted_physical_internal_energy(p, cosmo, NULL, u_new);
+      atomic_add_d(&wind_global_stats.E_cr_deposit, E_cr);
+      cs_new = sqrtf(hydro_gamma * hydro_gamma_minus_one * u_new);
+    }
+    p->wind_data.cr_energy = 0.;
+  }
+
+  /* The signal velocity of the first CFL time-step must know that the
+   * particle arrives at its speed in gas that is, to first order, at rest,
+   * and with the sound speed of any CR energy just deposited */
+  hydro_set_v_sig_based_on_velocity_kick(
+      p, cosmo, sqrtf(2.f * p->wind_data.recouple_e_kin) + cs_new);
+
   atomic_add_d(&wind_global_stats.n_recouple, 1.);
   atomic_add_d(&wind_global_stats.m_recouple, m);
   atomic_add_d(&wind_global_stats.E_kin_recouple,

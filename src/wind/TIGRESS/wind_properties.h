@@ -80,6 +80,20 @@ struct wind_props {
 
   /*! Time-step cap while decoupled */
   float dt_max;
+
+  /*! Warm channel (wind-design.md Sec. 10): on/off; constant loading (used
+   * if positive) or power law 10^norm Sigma_SFR^slope */
+  int warm_phase;
+  double warm_eta_M, warm_eta_M_log10_norm, warm_eta_M_slope;
+
+  /*! Warm launch speed, internal energy, minimum recoupling distance */
+  double warm_v, warm_u, warm_d_rec;
+
+  /*! CR energy loading, whether the warm phase carries CR energy too, and
+   * whether the CR energy is deposited as heat at recoupling */
+  double cr_eta_E;
+  int cr_carriers_both;
+  int cr_deposit_thermal;
 };
 
 /**
@@ -89,6 +103,10 @@ struct wind_props {
 struct wind_global_stats {
   double n_launch, m_launch, E_kin_launch, E_th_launch;
   double n_recouple, m_recouple, E_kin_recouple, E_th_recouple;
+  /* Per phase (hot, warm) launches and mass; CR energy launched, released
+   * at recoupling and deposited as heat; recouplings at the apex */
+  double n_launch_hot, m_launch_hot, n_launch_warm, m_launch_warm;
+  double E_cr_launch, E_cr_release, E_cr_deposit, n_recouple_apex;
 };
 
 extern struct wind_global_stats wind_global_stats;

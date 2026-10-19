@@ -186,4 +186,98 @@ static inline enum wind_draw_outcome wind_draw(const double u,
   return wind_draw_nothing;
 }
 
+/*
+ * Two-phase wind (wind-design.md Sec. 10): the hot channel launched above,
+ * and a warm channel launched at a fixed speed and temperature that
+ * recouples near the disc-halo interface or at its apex.
+ */
+
+/**
+ * @brief Outcome of the four-way draw.
+ */
+enum wind_draw4_outcome {
+  wind_draw4_nothing = 0,
+  wind_draw4_star = 1,
+  wind_draw4_hot = 2,
+  wind_draw4_warm = 3
+};
+
+/**
+ * @brief Star, hot wind, warm wind or nothing from one uniform number.
+ *
+ * The outcomes are the disjoint intervals [0, p_* N), [p_* N, (p_* + p_h) N),
+ * [(p_* + p_h) N, (p_* + p_h + p_w) N) and the rest of [0, 1), with N = 1 if
+ * p_* + p_h + p_w <= 1 and 1 / (p_* + p_h + p_w) otherwise. With p_w = 0 the
+ * outcome is that of wind_draw() for every u.
+ *
+ * @param u Uniform number in [0, 1).
+ * @param p_star Probability of forming a star, mdot_* dt / m_g.
+ * @param p_hot Probability of a hot launch, eta_M,hot p_star.
+ * @param p_warm Probability of a warm launch, eta_M,warm p_star.
+ */
+static inline enum wind_draw4_outcome wind_draw4(const double u,
+                                                 const double p_star,
+                                                 const double p_hot,
+                                                 const double p_warm) {
+  const double total = p_star + p_hot + p_warm;
+  const double norm = total > 1. ? 1. / total : 1.;
+  if (u < p_star * norm) return wind_draw4_star;
+  if (u < (p_star + p_hot) * norm) return wind_draw4_hot;
+  if (u < total * norm) return wind_draw4_warm;
+  return wind_draw4_nothing;
+}
+
+/*! Defaults of the loading sets of wind-design.md Sec. 10.3. Warm mass
+ * loading 10^norm Sigma_SFR^slope through K26 at |z| = 2 kpc and
+ * Sigma_SFR = 3.6e-3 (crmhd 2.8, mhd 1.3), with the K20b cool slope */
+#define WIND_WARM_ETA_M_SLOPE -0.44
+#define WIND_WARM_ETA_M_LOG10_NORM_K20 -0.961
+#define WIND_WARM_ETA_M_LOG10_NORM_TIGRESSPP -0.628
+/*! TIGRESSpp hot loadings: the K20b fits times K26 crmhd / mhd at 2 kpc,
+ * eta_M 0.17 / 0.33 and eta_E 0.016 / 0.040 */
+#define WIND_TIGRESSPP_HOT_ETA_M_FACTOR 0.515
+#define WIND_TIGRESSPP_HOT_ETA_E_FACTOR 0.40
+/*! TIGRESSpp CR energy loading beyond 1 kpc (K26 Fig. 11) */
+#define WIND_TIGRESSPP_CR_ETA_E 0.3
+
+/**
+ * @brief Energy per mass of a warm launch, kinetic plus enthalpy,
+ * v^2 / 2 + gamma u; its energy loading is eta_M,warm times this over u_*.
+ */
+static inline double wind_warm_specific_energy(const double v_warm,
+                                               const double u_warm,
+                                               const double gamma) {
+  return 0.5 * v_warm * v_warm + gamma * u_warm;
+}
+
+/**
+ * @brief CR energy per launched mass, e_CR = eta_E,CR u_* / eta_M,carry.
+ *
+ * With eta_M,carry the summed mass loading of the phases that carry CR
+ * energy, the expected CR energy launched per stellar mass formed is
+ * e_CR eta_M,carry = eta_E,CR u_*, whichever phases carry it.
+ *
+ * @param u_star SN energy per stellar mass.
+ * @param eta_E_cr CR energy loading.
+ * @param eta_M_carry Summed mass loading of the carrying phases (> 0).
+ */
+static inline double wind_cr_specific_energy(const double u_star,
+                                             const double eta_E_cr,
+                                             const double eta_M_carry) {
+  return eta_E_cr * u_star / eta_M_carry;
+}
+
+/**
+ * @brief Has a particle launched along sign * n passed its apex, i.e. has
+ * its velocity no positive component along sign * n?
+ *
+ * @param v The velocity.
+ * @param n The launch direction (unit vector).
+ * @param sign The sign of the launch, +-1.
+ */
+static inline int wind_past_apex(const float v[3], const double n[3],
+                                 const double sign) {
+  return sign * (v[0] * n[0] + v[1] * n[1] + v[2] * n[2]) <= 0.;
+}
+
 #endif /* SWIFT_WIND_PHYSICS_H */

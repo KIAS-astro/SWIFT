@@ -36,7 +36,11 @@ INLINE static int wind_read_particles(struct part *parts,
                                       struct io_props *list) {
   list[0] = io_make_input_field("WindDecoupled", CHAR, 1, OPTIONAL,
                                 UNIT_CONV_NO_UNITS, parts, wind_data.decoupled);
-  return 1;
+  list[1] = io_make_input_field("WindPhases", CHAR, 1, OPTIONAL,
+                                UNIT_CONV_NO_UNITS, parts, wind_data.phase);
+  list[2] = io_make_input_field("WindCREnergies", DOUBLE, 1, OPTIONAL,
+                                UNIT_CONV_ENERGY, parts, wind_data.cr_energy);
+  return 3;
 }
 
 /**
@@ -97,7 +101,24 @@ INLINE static int wind_write_particles(const struct part *parts,
       parts, wind_data.d_rec,
       "Recoupling distance of the last launch, max(d_rec, factor x kernel "
       "support at launch)");
-  return 12;
+  list[12] = io_make_output_field(
+      "WindPhases", CHAR, 1, UNIT_CONV_NO_UNITS, 0.f, parts, wind_data.phase,
+      "Phase of the last launch: 0 never launched, 1 hot, 2 warm");
+  list[13] = io_make_output_field(
+      "WindCREnergies", DOUBLE, 1, UNIT_CONV_ENERGY, 0.f, parts,
+      wind_data.cr_energy,
+      "CR energy carried while decoupled (0 after recoupling)");
+  list[14] = io_make_output_field(
+      "WindLaunchSigmaSFR", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.launch_Sigma_SFR,
+      "Sigma_SFR [Msun kpc^-2 yr^-1] of the particle at the last launch (-1 "
+      "if never launched)");
+  list[15] = io_make_output_field(
+      "WindLaunchMassLoadings", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.launch_eta_M,
+      "Mass loading of the launched phase at the last launch (-1 if never "
+      "launched)");
+  return 16;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

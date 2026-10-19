@@ -75,20 +75,38 @@ void wind_props_init(struct wind_props *props,
     error("Wind:loading_model must be TIGRESS, constant or none, got '%s'",
           model);
 
+  /* Wind:loading_set (wind-design.md Sec. 10.3) sets the defaults of the
+   * hot and warm norms and of the CR energy loading: K20 (no CRs) or
+   * TIGRESSpp (K26 with CRs at 2 kpc) */
+  char set[32];
+  parser_get_opt_param_string(params, "Wind:loading_set", set, "K20");
+  int tigresspp = 0;
+  if (strcmp(set, "TIGRESSpp") == 0)
+    tigresspp = 1;
+  else if (strcmp(set, "K20") != 0)
+    error("Wind:loading_set must be K20 or TIGRESSpp, got '%s'", set);
+
+  props->warm_phase = parser_get_opt_param_int(params, "Wind:warm_phase", 0);
+
   props->eta_M = 0.;
   props->eta_E = 0.;
   if (props->model == wind_loading_constant) {
     props->eta_M = parser_get_param_double(params, "Wind:eta_M");
     props->eta_E = parser_get_param_double(params, "Wind:eta_E");
-    if (props->eta_M <= 0.) error("Wind:eta_M must be positive");
+    if (props->eta_M < 0. || (props->eta_M == 0. && !props->warm_phase))
+      error("Wind:eta_M must be positive (or 0 with the warm phase on)");
   }
 
   props->eta_M_log10_norm = parser_get_opt_param_double(
-      params, "Wind:eta_M_log10_norm", WIND_TIGRESS_ETA_M_LOG10_NORM);
+      params, "Wind:eta_M_log10_norm",
+      WIND_TIGRESS_ETA_M_LOG10_NORM +
+          (tigresspp ? log10(WIND_TIGRESSPP_HOT_ETA_M_FACTOR) : 0.));
   props->eta_M_slope = parser_get_opt_param_double(params, "Wind:eta_M_slope",
                                                    WIND_TIGRESS_ETA_M_SLOPE);
   props->eta_E_log10_norm = parser_get_opt_param_double(
-      params, "Wind:eta_E_log10_norm", WIND_TIGRESS_ETA_E_LOG10_NORM);
+      params, "Wind:eta_E_log10_norm",
+      WIND_TIGRESS_ETA_E_LOG10_NORM +
+          (tigresspp ? log10(WIND_TIGRESSPP_HOT_ETA_E_FACTOR) : 0.));
   props->eta_E_slope = parser_get_opt_param_double(params, "Wind:eta_E_slope",
                                                    WIND_TIGRESS_ETA_E_SLOPE);
 
@@ -140,6 +158,50 @@ void wind_props_init(struct wind_props *props,
   props->dt_max =
       parser_get_opt_param_double(params, "Wind:max_timestep_Myr", 1.) * Myr;
 
+  /* Warm channel: loading, kick, temperature (mu = 0.6), recoupling */
+  props->warm_eta_M =
+      parser_get_opt_param_double(params, "Wind:warm_eta_M", -1.);
+  props->warm_eta_M_log10_norm = parser_get_opt_param_double(
+      params, "Wind:warm_eta_M_log10_norm",
+      tigresspp ? WIND_WARM_ETA_M_LOG10_NORM_TIGRESSPP
+                : WIND_WARM_ETA_M_LOG10_NORM_K20);
+  props->warm_eta_M_slope = parser_get_opt_param_double(
+      params, "Wind:warm_eta_M_slope", WIND_WARM_ETA_M_SLOPE);
+  const double kms = 1e5 / units_cgs_conversion_factor(us, UNIT_CONV_VELOCITY);
+  props->warm_v =
+      parser_get_opt_param_double(params, "Wind:warm_launch_speed_kms", 100.) *
+      kms;
+  const double T_warm =
+      parser_get_opt_param_double(params, "Wind:warm_temperature_K", 1e4);
+  props->warm_u = phys_const->const_boltzmann_k * T_warm /
+                  (hydro_gamma_minus_one * 0.6 * phys_const->const_proton_mass);
+  props->warm_d_rec = parser_get_opt_param_double(
+                          params, "Wind:warm_recoupling_distance_kpc", 1.5) *
+                      kpc;
+
+  /* CR energy carried by the wind particles */
+  props->cr_eta_E = parser_get_opt_param_double(
+      params, "Wind:cr_eta_E", tigresspp ? WIND_TIGRESSPP_CR_ETA_E : 0.);
+  char carriers[32];
+  parser_get_opt_param_string(params, "Wind:cr_carriers", carriers, "hot");
+  if (strcmp(carriers, "hot") == 0)
+    props->cr_carriers_both = 0;
+  else if (strcmp(carriers, "both") == 0)
+    props->cr_carriers_both = 1;
+  else
+    error("Wind:cr_carriers must be hot or both, got '%s'", carriers);
+  char deposit[32];
+  parser_get_opt_param_string(params, "Wind:cr_deposit", deposit, "thermal");
+  if (strcmp(deposit, "thermal") == 0)
+    props->cr_deposit_thermal = 1;
+  else if (strcmp(deposit, "none") == 0)
+    props->cr_deposit_thermal = 0;
+  else
+    error("Wind:cr_deposit must be thermal or none, got '%s'", deposit);
+  if (props->cr_eta_E > 0. && props->model == wind_loading_constant &&
+      props->eta_M == 0. && !props->cr_carriers_both)
+    error("Wind:cr_eta_E > 0 needs a hot phase or cr_carriers: both");
+
   bzero(&wind_global_stats, sizeof(struct wind_global_stats));
 }
 
@@ -168,6 +230,21 @@ void wind_props_print(const struct wind_props *props) {
       "Wind: recoupling at d = max(%.4g, %.3g kernel supports at launch) or "
       "t = %.4g (internal units); time-step cap %.4g",
       props->d_rec, props->d_rec_kernel_factor, props->t_rec, props->dt_max);
+  if (props->warm_phase) {
+    if (props->warm_eta_M > 0.)
+      message("Wind: warm phase, eta_M,warm = %.4g", props->warm_eta_M);
+    else
+      message("Wind: warm phase, eta_M,warm = 10^%.3g Sigma_SFR^%.3g",
+              props->warm_eta_M_log10_norm, props->warm_eta_M_slope);
+    message(
+        "Wind: warm kick %.4g, u_warm %.4g, recoupling at max(%.4g, kernel) "
+        "or t_rec or the apex (internal units)",
+        props->warm_v, props->warm_u, props->warm_d_rec);
+  }
+  if (props->cr_eta_E > 0.)
+    message("Wind: CR energy loading %.4g carried by %s, deposit %s",
+            props->cr_eta_E, props->cr_carriers_both ? "hot and warm" : "hot",
+            props->cr_deposit_thermal ? "thermal" : "none");
 }
 
 /**
@@ -213,6 +290,22 @@ void wind_print_stats(const struct engine *e) {
         "E_kin+E_th=%.6e E_kin+gamma*E_th=%.6e (internal units)",
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[2] + s[3],
         s[2] + hydro_gamma * s[3]);
+
+  double q[8] = {wind_global_stats.n_launch_hot,  wind_global_stats.m_launch_hot,
+                 wind_global_stats.n_launch_warm, wind_global_stats.m_launch_warm,
+                 wind_global_stats.E_cr_launch,   wind_global_stats.E_cr_release,
+                 wind_global_stats.E_cr_deposit,  wind_global_stats.n_recouple_apex};
+#ifdef WITH_MPI
+  double rq[8];
+  MPI_Reduce(q, rq, 8, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  memcpy(q, rq, sizeof(q));
+#endif
+  if (e->nodeID == 0)
+    message(
+        "Wind phases at t=%.6e: hot N=%.0f M=%.6e; warm N=%.0f M=%.6e; CR "
+        "launched=%.17e released=%.17e deposited=%.17e; apex recouplings "
+        "N=%.0f (internal units)",
+        e->time, q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7]);
 }
 
 #endif /* WIND_TIGRESS */

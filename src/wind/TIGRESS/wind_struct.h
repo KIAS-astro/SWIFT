@@ -62,11 +62,26 @@ struct wind_part_data {
   /*! Recoupling distance of this launch: max(d_rec, factor kernel_gamma h) */
   float d_rec;
 
+  /*! CR energy carried while decoupled and released at recoupling; a total,
+   * not per mass, so that launched = deposited to round-off */
+  double cr_energy;
+
+  /*! Sigma_SFR [Msun kpc^-2 yr^-1] and the mass loading of the phase at
+   * the last launch */
+  float launch_Sigma_SFR;
+  float launch_eta_M;
+
   /*! Number of launches of this particle */
   int launch_count;
 
   /*! 1 while the particle is decoupled from the hydrodynamics */
   char decoupled;
+
+  /*! Phase of the last launch: 0 none, 1 hot, 2 warm */
+  char phase;
+
+  /*! Sign of the last launch along the launch direction, +-1 */
+  char launch_sign;
 };
 
 #endif /* SWIFT_WIND_TIGRESS_STRUCT_H */

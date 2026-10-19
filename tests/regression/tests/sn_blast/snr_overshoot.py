@@ -70,7 +70,7 @@ def run(ctx):
         p["EAGLEEntropyFloor"].update({"Jeans_temperature_norm_K": 10.0,
                                        "Cool_temperature_norm_K": 10.0})
         p["SPH"].update(sph)
-        flags = ["--hydro", "--limiter"] + ([] if name == "adiab" else ["--cooling"])
+        flags = ["--hydro", "--limiter"] + (["--temperature"] if name == "adiab" else ["--cooling"])
         ctx.swift(p, flags, subdir=name, name=name, timeout=24 * 3600)
 
 

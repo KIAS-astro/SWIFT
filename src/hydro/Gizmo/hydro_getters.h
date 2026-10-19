@@ -193,6 +193,22 @@ __attribute__((always_inline)) INLINE static float hydro_get_comoving_entropy(
     const struct part *restrict p, const struct xpart *restrict xp) {
 
   if (p->rho > 0.0f) {
+    return gas_entropy_from_internal_energy(
+        p->rho, hydro_get_comoving_internal_energy(p, xp));
+  } else {
+    return 0.;
+  }
+}
+
+/**
+ * @brief Returns the comoving entropy of the predicted primitive variables.
+ *
+ * @param p The particle of interest.
+ */
+__attribute__((always_inline)) INLINE static float
+hydro_get_predicted_comoving_entropy(const struct part *restrict p) {
+
+  if (p->rho > 0.0f) {
     return gas_entropy_from_pressure(p->rho, p->P);
   } else {
     return 0.;
@@ -212,7 +228,7 @@ __attribute__((always_inline)) INLINE static float hydro_get_physical_entropy(
 
   /* Note: no cosmological conversion required here with our choice of
    * coordinates. */
-  return hydro_get_comoving_entropy(p, NULL);
+  return hydro_get_comoving_entropy(p, xp);
 }
 
 /**
@@ -224,7 +240,7 @@ __attribute__((always_inline)) INLINE static float hydro_get_physical_entropy(
 __attribute__((always_inline)) INLINE static float
 hydro_get_drifted_comoving_entropy(const struct part *restrict p) {
 
-  return hydro_get_comoving_entropy(p, NULL);
+  return hydro_get_predicted_comoving_entropy(p);
 }
 
 /**
@@ -239,7 +255,7 @@ hydro_get_drifted_physical_entropy(const struct part *restrict p,
 
   /* Note: no cosmological conversion required here with our choice of
    * coordinates. */
-  return hydro_get_comoving_entropy(p, NULL);
+  return hydro_get_predicted_comoving_entropy(p);
 }
 
 /**

@@ -55,6 +55,9 @@ def run(ctx):
     p["Gravity"].update({"max_physical_DM_softening": soft,
                          "max_physical_baryon_softening": soft})
     p["NFWDKPotential"]["epsilon"] = soft
+    if p["SPH"].get("particle_splitting"):
+        m_g = {"m2e5": 2e5, "m1.6e6": 1.6e6, "m1.3e7": 1.3e7}[RES] / 1e10
+        p["SPH"]["particle_splitting_mass_threshold"] = 1.5 * m_g
     ctx.swift(p, va.FLAGS, name="quick", timeout=3600)
 
 

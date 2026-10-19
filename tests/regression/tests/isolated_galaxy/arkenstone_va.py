@@ -152,6 +152,14 @@ def parameters(data_dir, t_end_myr, dt_snap_myr, wind):
                      recoupling_distance_kpc=2.0, recoupling_kernel_factor=2.0,
                      recoupling_time_Myr=25.0, max_timestep_Myr=1.0)
     p["Wind"].update(RECOUPLINGS[RECOUPLE])
+    if p["Wind"].get("recoupling_deposit") == "host":
+        # A host that absorbs a wind particle is split back to the base mass at
+        # the next rebuild, as Arepo derefines/refines S24a's host cell to its
+        # target mass. Without it LowSpec hosts absorbed up to 15 particles and
+        # the tree build failed at 344 Myr (grammar job 1198721).
+        m_g = {"m2e5": 2e5, "m1.6e6": 1.6e6, "m1.3e7": 1.3e7}[RES] / 1e10
+        p["SPH"].update({"particle_splitting": 1,
+                         "particle_splitting_mass_threshold": 1.5 * m_g})
     return p
 
 

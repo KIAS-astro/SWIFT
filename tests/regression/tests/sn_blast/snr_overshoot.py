@@ -94,6 +94,8 @@ def analyze(ctx):
                                 np.interp(1e5, t, p_r) / sedov_momentum(1e5, rho0), 1.0,
                                 kind="rel", tol=0.10, source="exact Sedov-Taylor solution"))
         else:
+            checks.append(Check(f"{name}: final time [Myr]", t[-1] / 1e6, T_END / 1.0227e-3,
+                                kind="rel", tol=1e-2, source="run completed"))
             for t_myr in (0.45, 1.5):
                 ctx.info[f"{name}: p_over_KO15_final_at_{t_myr}Myr"] = float(
                     np.interp(t_myr * 1e6, t, p_r) / KO15_P_FINAL)

@@ -301,8 +301,9 @@ INLINE static float wind_timestep(const struct wind_props *props) {
  * Wind carriers (wind-carrier-design.md): star particles of mass m_g / N_c
  * that carry the wind's mass, momentum, energy and metals from star-forming
  * gas to where they recouple, and deposit them there into the gas inside
- * their kernel. They use the stars density and feedback loops of the
- * feedback/none module and are removed in the time-step task.
+ * their kernel. They use the stars loops of the feedback/none module
+ * (density for h, prep2 for the kernel-weight sum, feedback for the
+ * deposit) and are removed in the time-step task.
  */
 
 /**
@@ -507,7 +508,8 @@ __attribute__((always_inline)) INLINE static void wind_carrier_drift(
 }
 
 /**
- * @brief Reset the kernel-weight sum before a stars density loop.
+ * @brief Reset the kernel-weight sum at the start of a step (and of each
+ * smoothing-length iteration; the sum is taken after the last one).
  */
 __attribute__((always_inline)) INLINE static void wind_carrier_init_spart(
     struct spart *sp) {
@@ -516,8 +518,9 @@ __attribute__((always_inline)) INLINE static void wind_carrier_init_spart(
 }
 
 /**
- * @brief Stars density loop: sum the kernel weights of the gas neighbours of
- * a depositing carrier.
+ * @brief Stars prep2 loop: sum the kernel weights of the gas neighbours of
+ * a depositing carrier, at its converged h and over the neighbours the
+ * feedback loop will visit.
  */
 __attribute__((always_inline)) INLINE static void wind_carrier_iact_density(
     const float r2, const float hi, struct spart *si) {

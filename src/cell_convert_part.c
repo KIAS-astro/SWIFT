@@ -100,7 +100,11 @@ void cell_recursively_shift_sparts(struct cell *c,
     if (c->stars.count > 0) {
 
       memswap(c->stars.parts, spart_to_insert, sizeof(struct spart));
-      spart_to_insert->gpart->id_or_neg_offset -= c->stars.count;
+
+      /* A removed (inhibited) spart has no gpart: wind carriers are removed
+       * and spawned between two rebuilds */
+      if (spart_to_insert->gpart != NULL)
+        spart_to_insert->gpart->id_or_neg_offset -= c->stars.count;
 
     } else {
       /* Nothing to do */

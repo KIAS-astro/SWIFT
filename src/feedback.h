@@ -25,6 +25,12 @@
 /* Select the correct feedback model */
 #if defined(FEEDBACK_NONE)
 #include "./feedback/none/feedback.h"
+#ifdef WIND_TIGRESS
+/* Wind carriers normalise their deposit in the prep2 loop, which has the
+ * same neighbour coverage as the feedback loop (the density loop does not
+ * when the ghost changes h by a large factor) */
+#define EXTRA_STAR_LOOPS
+#endif
 #elif defined(FEEDBACK_EAGLE_THERMAL)
 #include "./feedback/EAGLE_thermal/feedback.h"
 #elif defined(FEEDBACK_EAGLE_KINETIC)

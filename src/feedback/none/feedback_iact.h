@@ -45,7 +45,46 @@ runner_iact_nonsym_feedback_density(const float r2, const float dx[3],
                                     const struct xpart *xp,
                                     const struct cosmology *cosmo,
                                     const struct feedback_props *fb_props,
-                                    const integertime_t ti_current) {
+                                    const integertime_t ti_current) {}
+
+/**
+ * @brief First preparation loop over the gas neighbours of a star
+ * (non-symmetric), compiled with the TIGRESS wind (EXTRA_STAR_LOOPS).
+ *
+ * Nothing to do here.
+ */
+__attribute__((always_inline)) INLINE static void
+runner_iact_nonsym_feedback_prep1(const float r2, const float dx[3],
+                                  const float hi, const float hj,
+                                  const struct spart *si, struct part *pj,
+                                  const struct xpart *xpj,
+                                  const struct cosmology *cosmo,
+                                  const integertime_t ti_current) {}
+
+/**
+ * @brief Second preparation loop over the gas neighbours of a star
+ * (non-symmetric), compiled with the TIGRESS wind (EXTRA_STAR_LOOPS): a
+ * depositing wind carrier sums the kernel weights of its neighbours, after
+ * its smoothing length has converged and over the same neighbours as the
+ * feedback loop.
+ *
+ * @param r2 Comoving square distance between the two particles.
+ * @param dx Comoving vector separating both particles (si - pj).
+ * @param hi Comoving smoothing-length of particle i.
+ * @param hj Comoving smoothing-length of particle j.
+ * @param si First (star) particle.
+ * @param pj Second (gas) particle (not updated).
+ * @param xpj Extra particle data (not updated).
+ * @param cosmo The cosmological model.
+ * @param ti_current Current integer time.
+ */
+__attribute__((always_inline)) INLINE static void
+runner_iact_nonsym_feedback_prep2(const float r2, const float dx[3],
+                                  const float hi, const float hj,
+                                  struct spart *si, const struct part *pj,
+                                  const struct xpart *xpj,
+                                  const struct cosmology *cosmo,
+                                  const integertime_t ti_current) {
   wind_carrier_iact_density(r2, hi, si);
 }
 

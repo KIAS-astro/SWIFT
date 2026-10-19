@@ -726,15 +726,13 @@ void runner_do_timestep(struct runner *r, struct cell *c, const int timer) {
           old_time_step_length = get_timestep(p->time_bin, e->time_base);
         }
 
-        /* Recouple a decoupled wind particle that has travelled far or long
-         * enough. It rejoins the hydro on the shortest time-step of this
-         * step, so that its neighbours are woken by the limiter. */
-        int recoupled = 0;
-        if (part_is_decoupled(p) &&
-            wind_should_recouple(p, e->wind_props, e->time)) {
-          wind_recouple(p, xp, e->wind_props, cosmo, e->time);
-          recoupled = 1;
-        }
+        /* Recouple a decoupled wind particle that meets its criterion. It
+         * rejoins the hydro on the shortest time-step of this step, so that
+         * its neighbours are woken by the limiter (or, when depositing into
+         * a host, it waits for the merge at the start of the next step). */
+        const int recoupled =
+            part_is_decoupled(p) &&
+            wind_recouple_or_defer(p, xp, e->wind_props, cosmo, e->time);
 
         /* Get new time-step */
         integertime_t ti_rt_new_step = get_part_rt_timestep(p, xp, e);

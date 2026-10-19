@@ -43,6 +43,32 @@ enum wind_loading_model {
 };
 
 /**
+ * @brief When a decoupled particle recouples.
+ */
+enum wind_recoupling_mode {
+  wind_recouple_distance, /*<! after max(d_rec, factor x kernel support) */
+  wind_recouple_density   /*<! where the ambient gas density is < rho_rec */
+};
+
+/**
+ * @brief What happens to the particle's contents at recoupling.
+ */
+enum wind_recoupling_deposit {
+  wind_deposit_self, /*<! the particle rejoins the hydro as itself */
+  wind_deposit_host  /*<! merged into its nearest gas neighbour and removed */
+};
+
+/**
+ * @brief The criterion that ended a flight (written to snapshots).
+ */
+enum wind_recoupling_reason {
+  wind_reason_none = 0,
+  wind_reason_distance = 1,
+  wind_reason_density = 2,
+  wind_reason_time = 3
+};
+
+/**
  * @brief Properties of the wind model (internal units unless stated).
  */
 struct wind_props {
@@ -75,6 +101,14 @@ struct wind_props {
 
   /*! Time-step cap while decoupled */
   float dt_max;
+
+  /*! Recoupling criterion and what happens to the particle's contents */
+  enum wind_recoupling_mode mode;
+  enum wind_recoupling_deposit deposit;
+
+  /*! Ambient gas mass density below which a particle recouples (density
+   * mode) */
+  double rho_rec;
 };
 
 /**
@@ -84,6 +118,9 @@ struct wind_props {
 struct wind_global_stats {
   double n_launch, m_launch, E_kin_launch, E_th_launch;
   double n_recouple, m_recouple, E_kin_recouple, E_th_recouple;
+  /*! Recouplings by criterion (index: enum wind_recoupling_reason) and
+   * merges into a host */
+  double n_reason[4], n_merged;
 };
 
 extern struct wind_global_stats wind_global_stats;
@@ -96,5 +133,6 @@ void wind_props_print(const struct wind_props *props);
 void wind_struct_dump(const struct wind_props *props, FILE *stream);
 void wind_struct_restore(struct wind_props *props, FILE *stream);
 void wind_print_stats(const struct engine *e);
+void wind_engine_pass(struct engine *e);
 
 #endif /* SWIFT_WIND_TIGRESS_PROPERTIES_H */

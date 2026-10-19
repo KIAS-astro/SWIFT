@@ -62,11 +62,24 @@ struct wind_part_data {
   /*! Recoupling distance of this launch: max(d_rec, factor kernel_gamma h) */
   float d_rec;
 
+  /*! Gas density at the particle from the non-decoupled neighbours whose
+   * kernels contain it (scatter estimate), set at the start of every step
+   * while decoupled when recoupling by density or depositing into a host;
+   * -1 when not computed */
+  float rho_ambient;
+
   /*! Number of launches of this particle */
   int launch_count;
 
   /*! 1 while the particle is decoupled from the hydrodynamics */
   char decoupled;
+
+  /*! Criterion that ended the last flight (enum wind_recoupling_reason) */
+  char recouple_reason;
+
+  /*! Criterion met, waiting to be merged into its host at the next step
+   * (deposit into a host); 0 otherwise */
+  char recouple_pending;
 };
 
 #endif /* SWIFT_WIND_TIGRESS_STRUCT_H */

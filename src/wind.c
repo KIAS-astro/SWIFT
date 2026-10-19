@@ -30,12 +30,18 @@
 #ifdef WIND_TIGRESS
 
 /* Local includes. */
+#include "cell.h"
 #include "engine.h"
 #include "error.h"
+#include "hydro.h"
+#include "kernel_hydro.h"
 #include "parser.h"
 #include "physical_constants.h"
 #include "restart.h"
+#include "space.h"
+#include "timestep_sync_part.h"
 #include "units.h"
+#include "wind.h"
 #include "wind_physics.h"
 
 /* MPI headers. */
@@ -43,6 +49,7 @@
 #include <mpi.h>
 #endif
 
+#include <float.h>
 #include <math.h>
 #include <string.h>
 
@@ -116,6 +123,34 @@ void wind_props_init(struct wind_props *props,
   props->dt_max =
       parser_get_opt_param_double(params, "Wind:max_timestep_Myr", 1.) * Myr;
 
+  char mode[32] = "distance";
+  parser_get_opt_param_string(params, "Wind:recoupling_mode", mode,
+                              "distance");
+  if (strcmp(mode, "distance") == 0)
+    props->mode = wind_recouple_distance;
+  else if (strcmp(mode, "density") == 0)
+    props->mode = wind_recouple_density;
+  else
+    error("Wind:recoupling_mode must be distance or density, got '%s'", mode);
+
+  char deposit[32] = "self";
+  parser_get_opt_param_string(params, "Wind:recoupling_deposit", deposit,
+                              "self");
+  if (strcmp(deposit, "self") == 0)
+    props->deposit = wind_deposit_self;
+  else if (strcmp(deposit, "host") == 0)
+    props->deposit = wind_deposit_host;
+  else
+    error("Wind:recoupling_deposit must be self or host, got '%s'", deposit);
+
+  /* n_H threshold to mass density with the primordial hydrogen fraction
+   * 0.752 (Arkenstone: 0.1 rho_SF) */
+  const double nH_rec = parser_get_opt_param_double(
+      params, "Wind:recoupling_density_H_p_cm3", 0.013);
+  const double rho_cgs = nH_rec * 1.67262192e-24 / 0.752;
+  props->rho_rec =
+      rho_cgs / units_cgs_conversion_factor(us, UNIT_CONV_DENSITY);
+
   bzero(&wind_global_stats, sizeof(struct wind_global_stats));
 }
 
@@ -142,6 +177,11 @@ void wind_props_print(const struct wind_props *props) {
       "Wind: recoupling at d = max(%.4g, %.3g kernel supports at launch) or "
       "t = %.4g (internal units); time-step cap %.4g",
       props->d_rec, props->d_rec_kernel_factor, props->t_rec, props->dt_max);
+  message(
+      "Wind: recoupling mode '%s' (density threshold %.4g internal units), "
+      "deposit '%s'",
+      props->mode == wind_recouple_density ? "density" : "distance",
+      props->rho_rec, props->deposit == wind_deposit_host ? "host" : "self");
 }
 
 /**
@@ -170,21 +210,243 @@ void wind_struct_restore(struct wind_props *props, FILE *stream) {
  * @brief Print the totals of all ranks as one log line.
  */
 void wind_print_stats(const struct engine *e) {
-  double s[8] = {wind_global_stats.n_launch,     wind_global_stats.m_launch,
-                 wind_global_stats.E_kin_launch, wind_global_stats.E_th_launch,
-                 wind_global_stats.n_recouple,   wind_global_stats.m_recouple,
-                 wind_global_stats.E_kin_recouple,
-                 wind_global_stats.E_th_recouple};
+  double s[12] = {wind_global_stats.n_launch,     wind_global_stats.m_launch,
+                  wind_global_stats.E_kin_launch, wind_global_stats.E_th_launch,
+                  wind_global_stats.n_recouple,   wind_global_stats.m_recouple,
+                  wind_global_stats.E_kin_recouple,
+                  wind_global_stats.E_th_recouple,
+                  wind_global_stats.n_reason[wind_reason_distance],
+                  wind_global_stats.n_reason[wind_reason_density],
+                  wind_global_stats.n_reason[wind_reason_time],
+                  wind_global_stats.n_merged};
 #ifdef WITH_MPI
-  double r[8];
-  MPI_Reduce(s, r, 8, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  double r[12];
+  MPI_Reduce(s, r, 12, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   memcpy(s, r, sizeof(s));
 #endif
-  if (e->nodeID == 0)
+  if (e->nodeID == 0) {
     message(
         "Wind totals at t=%.6e: launched N=%.0f M=%.6e E_kin=%.6e E_th=%.6e; "
         "recoupled N=%.0f M=%.6e E_kin=%.6e E_th=%.6e (internal units)",
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+    message(
+        "Wind recouplings by criterion: distance %.0f density %.0f time %.0f; "
+        "merged into a host %.0f",
+        s[8], s[9], s[10], s[11]);
+  }
+}
+
+/**
+ * @brief Running state of the neighbour walk for one decoupled particle.
+ */
+struct wind_gather {
+  double x[3];
+  double rho;
+  double r2_min;
+  struct part *host;
+  struct cell *host_cell;
+};
+
+/**
+ * @brief Separation along one axis, nearest image in a periodic box.
+ */
+static double wind_wrap(double dx, const double dim, const int periodic) {
+  if (periodic) {
+    if (dx > 0.5 * dim) dx -= dim;
+    if (dx < -0.5 * dim) dx += dim;
+  }
+  return dx;
+}
+
+/**
+ * @brief Walk the cell tree: add every non-decoupled gas particle whose kernel
+ * contains g->x to the scatter density, and keep the nearest one.
+ */
+static void wind_gather_recurse(struct cell *c, const struct space *s,
+                                struct wind_gather *g) {
+  if (c->hydro.count == 0) return;
+
+  /* Distance from the point to the cell's box */
+  double d2 = 0.;
+  for (int k = 0; k < 3; k++) {
+    const double centre = c->loc[k] + 0.5 * c->width[k];
+    const double dx =
+        fabs(wind_wrap(g->x[k] - centre, s->dim[k], s->periodic)) -
+        0.5 * c->width[k];
+    if (dx > 0.) d2 += dx * dx;
+  }
+  const double reach = kernel_gamma * c->hydro.h_max;
+  if (d2 > reach * reach && d2 > g->r2_min) return;
+
+  if (c->split) {
+    for (int k = 0; k < 8; k++)
+      if (c->progeny[k] != NULL) wind_gather_recurse(c->progeny[k], s, g);
+    return;
+  }
+
+  for (int i = 0; i < c->hydro.count; i++) {
+    struct part *pj = &c->hydro.parts[i];
+    if (pj->time_bin == time_bin_inhibited ||
+        pj->time_bin == time_bin_not_created)
+      continue;
+    if (part_is_decoupled(pj)) continue;
+    double r2 = 0.;
+    for (int k = 0; k < 3; k++) {
+      const double dx = wind_wrap(g->x[k] - pj->x[k], s->dim[k], s->periodic);
+      r2 += dx * dx;
+    }
+    const float hj = pj->h;
+    if (r2 < kernel_gamma2 * hj * hj) {
+      const float hj_inv = 1.f / hj;
+      float w;
+      kernel_eval(sqrtf((float)r2) * hj_inv, &w);
+      g->rho += hydro_get_mass(pj) * w * pow_dimension(hj_inv);
+    }
+    if (r2 < g->r2_min) {
+      g->r2_min = r2;
+      g->host = pj;
+      g->host_cell = c;
+    }
+  }
+}
+
+/**
+ * @brief Merge a wind particle into its host and remove it: mass, momentum
+ * and total (kinetic plus internal) energy are conserved; the host takes the
+ * mass-weighted mean velocity and the internal energy that closes the energy
+ * budget, so the relative kinetic energy becomes heat. This is the SPH
+ * counterpart of Arkenstone's standard recoupling into the host cell (Smith
+ * et al. 2024, Sec. 3.4.1).
+ */
+static void wind_merge_into_host(struct engine *e, struct part *p,
+                                 struct xpart *xp, struct part *h,
+                                 struct xpart *hx, struct cell *hc) {
+
+  const struct cosmology *cosmo = e->cosmology;
+  const double mw = hydro_get_mass(p), mh = hydro_get_mass(h);
+  const double m = mw + mh;
+  const double uw = hydro_get_physical_internal_energy(p, xp, cosmo);
+  const double uh = hydro_get_physical_internal_energy(h, hx, cosmo);
+
+  double v[3], ekw = 0., ekh = 0., ek = 0., dv2 = 0.;
+  for (int k = 0; k < 3; k++) {
+    v[k] = (mw * xp->v_full[k] + mh * hx->v_full[k]) / m;
+    ekw += 0.5 * xp->v_full[k] * xp->v_full[k];
+    ekh += 0.5 * hx->v_full[k] * hx->v_full[k];
+    ek += 0.5 * v[k] * v[k];
+    dv2 += (v[k] - hx->v_full[k]) * (v[k] - hx->v_full[k]);
+  }
+  const double u = (mw * (uw + ekw) + mh * (uh + ekh)) / m - ek;
+
+  /* Record the flight on the particle before it is removed */
+  p->wind_data.recouple_time = e->time;
+  p->wind_data.recouple_distance = wind_distance(p);
+  p->wind_data.recouple_e_kin = ekw;
+  p->wind_data.recouple_e_th = uw;
+  const int reason = p->wind_data.recouple_pending;
+  wind_global_stats.n_reason[reason] += 1.;
+  wind_global_stats.n_recouple += 1.;
+  wind_global_stats.m_recouple += mw;
+  wind_global_stats.E_kin_recouple += mw * ekw;
+  wind_global_stats.E_th_recouple += mw * uw;
+  wind_global_stats.n_merged += 1.;
+
+  /* Metal mass fractions: mass-weighted mean */
+#if defined(CHEMISTRY_EAGLE)
+  for (int k = 0; k < chemistry_element_count; k++) {
+    h->chemistry_data.metal_mass_fraction[k] =
+        (mw * p->chemistry_data.metal_mass_fraction[k] +
+         mh * h->chemistry_data.metal_mass_fraction[k]) /
+        m;
+    h->chemistry_data.smoothed_metal_mass_fraction[k] =
+        (mw * p->chemistry_data.smoothed_metal_mass_fraction[k] +
+         mh * h->chemistry_data.smoothed_metal_mass_fraction[k]) /
+        m;
+  }
+  h->chemistry_data.metal_mass_fraction_total =
+      (mw * p->chemistry_data.metal_mass_fraction_total +
+       mh * h->chemistry_data.metal_mass_fraction_total) /
+      m;
+  h->chemistry_data.smoothed_metal_mass_fraction_total =
+      (mw * p->chemistry_data.smoothed_metal_mass_fraction_total +
+       mh * h->chemistry_data.smoothed_metal_mass_fraction_total) /
+      m;
+#endif
+
+  hydro_set_mass(h, m);
+  if (h->gpart != NULL) h->gpart->mass = m;
+  for (int k = 0; k < 3; k++) {
+    hx->v_full[k] = v[k];
+    h->v[k] = v[k];
+    if (h->gpart != NULL) h->gpart->v_full[k] = v[k];
+  }
+  hydro_set_physical_internal_energy(h, hx, cosmo, u);
+  hydro_set_drifted_physical_internal_energy(h, cosmo, NULL, u);
+  hydro_set_v_sig_based_on_velocity_kick(h, cosmo, sqrt(dv2));
+
+  /* The host may be inactive: put it on the current step */
+  timestep_sync_part(h);
+  cell_activate_sync_part(hc, &e->sched);
+
+  /* The particle's mass and gravity are now the host's */
+  if (p->gpart != NULL) p->gpart->mass = 0.f;
+  cell_remove_part(e, hc, p, xp);
+}
+
+/**
+ * @brief Before the tasks of a step: for every decoupled particle, the
+ * ambient gas density (scatter estimate from the non-decoupled neighbours
+ * whose kernels contain it) and, if it met its criterion with deposit into a
+ * host, the merge into its nearest gas neighbour.
+ *
+ * A serial walk of the cell tree per decoupled particle; decoupled particles
+ * are rare (tens to hundreds), so the cost is small. Positions are those of
+ * the last drift. Single rank only.
+ *
+ * @param e The #engine.
+ */
+void wind_engine_pass(struct engine *e) {
+
+  const struct wind_props *props = e->wind_props;
+  if (props->mode == wind_recouple_distance &&
+      props->deposit == wind_deposit_self)
+    return;
+  if (e->nr_nodes > 1)
+    error("Wind: density recoupling and host deposit need a single rank");
+  if (props->deposit == wind_deposit_host &&
+      !(e->policy & engine_policy_timestep_sync))
+    error("Wind: recoupling_deposit host needs the time-step sync (--sync)");
+
+  struct space *s = e->s;
+  for (size_t k = 0; k < s->nr_parts; k++) {
+    struct part *p = &s->parts[k];
+    struct xpart *xp = &s->xparts[k];
+    if (p->time_bin == time_bin_inhibited ||
+        p->time_bin == time_bin_not_created)
+      continue;
+    if (!part_is_decoupled(p)) continue;
+
+    struct wind_gather g;
+    for (int i = 0; i < 3; i++) g.x[i] = p->x[i];
+    g.rho = 0.;
+    g.r2_min = FLT_MAX;
+    g.host = NULL;
+    g.host_cell = NULL;
+    for (int c = 0; c < s->nr_cells; c++)
+      wind_gather_recurse(&s->cells_top[c], s, &g);
+    p->wind_data.rho_ambient = g.rho;
+
+    if (p->wind_data.recouple_pending == wind_reason_none) continue;
+    if (g.host != NULL) {
+      wind_merge_into_host(e, p, xp, g.host, &s->xparts[g.host - s->parts],
+                           g.host_cell);
+    } else {
+      /* No gas within reach (vacuum): rejoin as itself; with no neighbours
+       * there is nothing for the limiter to wake */
+      const int reason = p->wind_data.recouple_pending;
+      wind_recouple(p, xp, props, e->cosmology, e->time, reason);
+    }
+  }
 }
 
 #endif /* WIND_TIGRESS */

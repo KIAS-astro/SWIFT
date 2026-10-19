@@ -97,7 +97,18 @@ INLINE static int wind_write_particles(const struct part *parts,
       parts, wind_data.d_rec,
       "Recoupling distance of the last launch, max(d_rec, factor x kernel "
       "support at launch)");
-  return 12;
+  list[12] = io_make_output_field(
+      "WindAmbientDensities", FLOAT, 1, UNIT_CONV_DENSITY, -3.f, parts,
+      wind_data.rho_ambient,
+      "Gas density at the particle from the non-decoupled neighbours whose "
+      "kernels contain it, at the start of the last step while decoupled "
+      "(density recoupling or host deposit; -1 if never computed)");
+  list[13] = io_make_output_field(
+      "WindRecouplingReasons", CHAR, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.recouple_reason,
+      "Criterion that ended the last flight: 0 none, 1 distance, 2 density, "
+      "3 time");
+  return 14;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

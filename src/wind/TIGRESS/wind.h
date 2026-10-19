@@ -123,8 +123,11 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.recouple_e_th = -1.f;
   p->wind_data.recouple_distance = -1.f;
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
+  p->wind_data.rho_ambient = -1.f;
   p->wind_data.launch_count = 0;
   p->wind_data.decoupled = decoupled ? 1 : 0;
+  p->wind_data.recouple_reason = wind_reason_none;
+  p->wind_data.recouple_pending = wind_reason_none;
 
   if (decoupled) {
     p->wind_data.launch_time = time;
@@ -217,6 +220,8 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
   p->wind_data.launch_e_th = xp->u_full;
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
+  p->wind_data.rho_ambient = -1.f;
+  p->wind_data.recouple_pending = wind_reason_none;
 
   const double m = hydro_get_mass(p);
   atomic_add_d(&wind_global_stats.n_launch, 1.);
@@ -236,13 +241,27 @@ __attribute__((always_inline)) INLINE static double wind_distance(
 
 /**
  * @brief Should a decoupled particle recouple (WD5)?
+ *
+ * Distance mode: after max(d_rec, factor x kernel support at launch).
+ * Density mode: once the ambient density computed at the start of the step
+ * (wind_engine_pass) is below rho_rec. Either mode: after t_rec. A particle
+ * already waiting to be merged into a host is not tested again.
+ *
+ * @return The criterion met (enum wind_recoupling_reason), 0 if none.
  */
 INLINE static int wind_should_recouple(const struct part *p,
                                        const struct wind_props *props,
                                        const double time) {
-  if (!p->wind_data.decoupled) return 0;
-  return wind_distance(p) >= p->wind_data.d_rec ||
-         time - p->wind_data.launch_time >= props->t_rec;
+  if (!p->wind_data.decoupled || p->wind_data.recouple_pending)
+    return wind_reason_none;
+  if (time - p->wind_data.launch_time >= props->t_rec) return wind_reason_time;
+  if (props->mode == wind_recouple_distance) {
+    if (wind_distance(p) >= p->wind_data.d_rec) return wind_reason_distance;
+  } else {
+    const float rho = p->wind_data.rho_ambient;
+    if (rho >= 0.f && rho < props->rho_rec) return wind_reason_density;
+  }
+  return wind_reason_none;
 }
 
 /**
@@ -252,9 +271,12 @@ INLINE static int wind_should_recouple(const struct part *p,
 INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                                  const struct wind_props *props,
                                  const struct cosmology *cosmo,
-                                 const double time) {
+                                 const double time, const int reason) {
 
   p->wind_data.decoupled = 0;
+  p->wind_data.recouple_reason = reason;
+  p->wind_data.recouple_pending = wind_reason_none;
+  atomic_add_d(&wind_global_stats.n_reason[reason], 1.);
   p->wind_data.recouple_time = time;
   p->wind_data.recouple_distance = wind_distance(p);
   p->wind_data.recouple_e_kin = wind_specific_kinetic(xp);
@@ -273,6 +295,29 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                m * p->wind_data.recouple_e_kin);
   atomic_add_d(&wind_global_stats.E_th_recouple,
                m * p->wind_data.recouple_e_th);
+}
+
+/**
+ * @brief Test a decoupled particle at the end of its step and recouple it.
+ *
+ * With deposit into a host the particle stays decoupled and is marked; the
+ * merge happens in wind_engine_pass at the start of the next step, where
+ * the neighbours are accessible.
+ *
+ * @return 1 if the particle rejoined the hydro now, 0 otherwise.
+ */
+INLINE static int wind_recouple_or_defer(struct part *p, struct xpart *xp,
+                                         const struct wind_props *props,
+                                         const struct cosmology *cosmo,
+                                         const double time) {
+  const int reason = wind_should_recouple(p, props, time);
+  if (reason == wind_reason_none) return 0;
+  if (props->deposit == wind_deposit_host) {
+    p->wind_data.recouple_pending = reason;
+    return 0;
+  }
+  wind_recouple(p, xp, props, cosmo, time, reason);
+  return 1;
 }
 
 /**

@@ -2996,6 +2996,9 @@ int engine_step(struct engine *e) {
     prfm_map_build(e, &e->star_formation->map);
 #endif
 
+  /* Ambient densities of decoupled wind particles and merges into hosts */
+  if (e->policy & engine_policy_hydro) wind_engine_pass(e);
+
   /* Start all the tasks. */
   TIMER_TIC;
   engine_launch(e, "tasks");

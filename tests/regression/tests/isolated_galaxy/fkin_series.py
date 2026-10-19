@@ -117,6 +117,8 @@ def run(ctx):
             "SNII_delta_T_K": 10 ** 7.5, "SNII_delta_v_km_p_s": 50.0,
             "SNII_sampled_delay": 1})
         p["EAGLEFeedback"].update(fb)
+        if RES.endswith("_cgm"):  # per-particle metals from the ICs (CGM at 0.3 solar)
+            p["EAGLEChemistry"]["init_abundance_metal"] = -1
         physics = ([] if name == "adiabatic" else
                    ["--star-formation", "--cooling", "--feedback"])
         ctx.swift(p, ["--hydro", "--self-gravity", "--external-gravity", "--stars"]

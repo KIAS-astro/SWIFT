@@ -139,5 +139,6 @@ void wind_struct_dump(const struct wind_props *props, FILE *stream);
 void wind_struct_restore(struct wind_props *props, FILE *stream);
 void wind_print_stats(const struct engine *e);
 void wind_engine_pass(struct engine *e);
+void wind_debug_check(struct engine *e);
 
 #endif /* SWIFT_WIND_TIGRESS_PROPERTIES_H */

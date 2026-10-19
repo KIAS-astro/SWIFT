@@ -346,6 +346,52 @@ static void wind_gather_recurse(struct cell *c, const struct space *s,
  * counterpart of Arkenstone's standard recoupling into the host cell (Smith
  * et al. 2024, Sec. 3.4.1).
  */
+#define WIND_DEBUG_NLOG 4096
+static struct {
+  long long host, wind;
+  int step, bin;
+  double m, v, u, hh;
+} wind_debug_log[WIND_DEBUG_NLOG];
+static int wind_debug_nlog = 0;
+
+/**
+ * @brief DEBUG: after the tasks of a step, every gas and gravity particle must
+ * be finite; on failure print the offender and this step's merges.
+ */
+void wind_debug_check(struct engine *e) {
+  const struct space *s = e->s;
+  for (size_t k = 0; k < s->nr_gparts; k++) {
+    const struct gpart *g = &s->gparts[k];
+    if (g->time_bin == time_bin_inhibited || g->time_bin == time_bin_not_created)
+      continue;
+    if (isfinite(g->x[0] + g->x[1] + g->x[2] + g->v_full[0] + g->v_full[1] +
+                 g->v_full[2] + g->a_grav[0] + g->a_grav[1] + g->a_grav[2]))
+      continue;
+    long long pid = -1;
+    if (g->type == swift_type_gas) pid = s->parts[-g->id_or_neg_offset].id;
+    message(
+        "DEBUG non-finite gpart step %d type %d part id %lld x %g %g %g v %g %g "
+        "%g a %g %g %g m %g bin %d",
+        e->step, g->type, pid, g->x[0], g->x[1], g->x[2], g->v_full[0],
+        g->v_full[1], g->v_full[2], g->a_grav[0], g->a_grav[1], g->a_grav[2],
+        g->mass, g->time_bin);
+    if (g->type == swift_type_gas) {
+      const struct part *p = &s->parts[-g->id_or_neg_offset];
+      const struct xpart *xp = &s->xparts[-g->id_or_neg_offset];
+      message("DEBUG  part u %g rho %g h %g a_hydro %g %g %g dec %d", xp->u_full,
+              p->rho, p->h, p->a_hydro[0], p->a_hydro[1], p->a_hydro[2],
+              p->wind_data.decoupled);
+    }
+    for (int i = 0; i < wind_debug_nlog; i++)
+      message("DEBUG  merge %d step %d host %lld wind %lld bin %d m %g v %g u %g h %g",
+              i, wind_debug_log[i].step, wind_debug_log[i].host,
+              wind_debug_log[i].wind, wind_debug_log[i].bin, wind_debug_log[i].m,
+              wind_debug_log[i].v, wind_debug_log[i].u, wind_debug_log[i].hh);
+    error("DEBUG non-finite particle after the tasks of step %d", e->step);
+  }
+  wind_debug_nlog = 0;
+}
+
 static void wind_merge_into_host(struct engine *e, struct part *p,
                                  struct xpart *xp, struct part *h,
                                  struct xpart *hx, struct cell *hc) {
@@ -377,6 +423,17 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     dv2 += (v[k] - hx->v_full[k]) * (v[k] - hx->v_full[k]);
   }
   const double u = (mw * (uw + ekw) + mh * (uh + ekh)) / m - ek;
+  if (wind_debug_nlog < WIND_DEBUG_NLOG) {
+    wind_debug_log[wind_debug_nlog].host = h->id;
+    wind_debug_log[wind_debug_nlog].wind = p->id;
+    wind_debug_log[wind_debug_nlog].step = e->step;
+    wind_debug_log[wind_debug_nlog].bin = h->time_bin;
+    wind_debug_log[wind_debug_nlog].m = m;
+    wind_debug_log[wind_debug_nlog].v = sqrt(2. * ek);
+    wind_debug_log[wind_debug_nlog].u = u;
+    wind_debug_log[wind_debug_nlog].hh = h->h;
+    wind_debug_nlog++;
+  }
 
   /* Record the flight on the particle before it is removed */
   p->wind_data.recouple_time = e->time;

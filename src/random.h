@@ -54,6 +54,7 @@ enum random_number_type {
   random_number_isotropic_SNII_feedback_ray_phi = 6311114273LL,
   random_number_isotropic_SNII_heat_ray_theta = 4421337181LL,
   random_number_isotropic_SNII_heat_ray_phi = 7713150041LL,
+  random_number_SNIa_feedback = 2605918921LL,
   random_number_isotropic_SNIa_feedback_ray_theta = 11134675471LL,
   random_number_isotropic_SNIa_feedback_ray_phi = 5165786851LL,
   random_number_isotropic_AGN_feedback_ray_theta = 8899891613LL,

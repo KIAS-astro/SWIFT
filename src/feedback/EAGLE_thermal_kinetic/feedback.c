@@ -140,6 +140,58 @@ INLINE static double eagle_feedback_temperature_change(
   return min(delta_T_above_min, props->SNII_delta_T_max);
 }
 
+/**
+ * @brief Stochastic thermal injection of the SNIa energy of this step.
+ *
+ * The same scheme as the SNII thermal channel (heating probability per
+ * neighbour, density-dependent temperature change, isotropic rays), with its
+ * own rays and random stream.
+ *
+ * @param sp The #spart.
+ * @param E_SNIa SNIa energy released this step (internal units).
+ * @param ngb_gas_N Number of gas neighbours.
+ * @param ngb_gas_mass Total mass of the gas neighbours.
+ * @param ngb_nH_cgs Hydrogen number density around the star [cm^-3].
+ * @param feedback_props The properties of the feedback model.
+ * @param ti_begin Integer time at the start of the step (random seed).
+ */
+INLINE static void compute_SNIa_stochastic_feedback(
+    struct spart *sp, const double E_SNIa, const int ngb_gas_N,
+    const float ngb_gas_mass, const double ngb_nH_cgs,
+    const struct feedback_props *feedback_props, const integertime_t ti_begin) {
+
+  if (E_SNIa <= 0.) return;
+
+  const double delta_T =
+      eagle_feedback_temperature_change(feedback_props, ngb_nH_cgs);
+  const double conv_factor = feedback_props->temp_to_u_factor;
+  const double prob = E_SNIa / (conv_factor * delta_T * ngb_gas_mass);
+
+  double delta_u;
+  int number_of_events = 0;
+  if (prob <= 1.) {
+    delta_u = delta_T * conv_factor;
+    for (int i = 0; i < ngb_gas_N; i++) {
+      const double rand_SNIa = random_unit_interval_part_ID_and_index(
+          sp->id, i, ti_begin, random_number_SNIa_feedback);
+      if (rand_SNIa < prob) number_of_events++;
+    }
+  } else {
+    delta_u = E_SNIa / ngb_gas_mass;
+    number_of_events = ngb_gas_N;
+  }
+
+  if (number_of_events > eagle_SNIa_feedback_num_of_rays) {
+    delta_u *=
+        (double)number_of_events / (double)eagle_SNIa_feedback_num_of_rays;
+    number_of_events = eagle_SNIa_feedback_num_of_rays;
+  }
+
+  sp->feedback_data.to_distribute.SNIa_delta_u = delta_u;
+  sp->feedback_data.to_distribute.SNIa_num_of_thermal_energy_inj =
+      number_of_events;
+}
+
 INLINE static void compute_SNII_feedback(
     struct spart *sp, const double star_age, const double dt,
     const int ngb_gas_N, const float ngb_gas_mass, const double ngb_nH_cgs,
@@ -451,8 +503,20 @@ void compute_stellar_evolution(const struct feedback_props *feedback_props,
   /* Compute elements, energy and momentum to distribute from the
    *  three channels SNIa, SNII, AGB */
   if (feedback_props->with_SNIa_enrichment) {
+    const double energy_before = sp->feedback_data.to_distribute.energy;
     evolve_SNIa(log10_min_dying_mass_Msun, log10_max_dying_mass_Msun, M_init, Z,
                 feedback_props, star_age_Gyr, dt_Gyr, &sp->feedback_data);
+
+    /* Take the SNIa energy out of the continuous injection and heat
+     * stochastically instead */
+    if (feedback_props->SNIa_stochastic) {
+      const double E_SNIa =
+          sp->feedback_data.to_distribute.energy - energy_before;
+      sp->feedback_data.to_distribute.energy = energy_before;
+      compute_SNIa_stochastic_feedback(sp, E_SNIa, ngb_Number, ngb_gas_mass,
+                                       ngb_gas_phys_nH_cgs, feedback_props,
+                                       ti_begin);
+    }
   }
   if (feedback_props->with_SNII_enrichment) {
     evolve_SNII(log10_min_dying_mass_Msun, log10_max_dying_mass_Msun, M_init, Z,
@@ -580,6 +644,20 @@ void feedback_props_init(struct feedback_props *fp,
       parser_get_param_float(params, "EAGLEFeedback:SNII_delta_T_K");
   fp->SNe_deltaT_desired /=
       units_cgs_conversion_factor(us, UNIT_CONV_TEMPERATURE);
+
+  /* SNIa energy: spread over all neighbours every step (EAGLE), or injected
+   * by the stochastic heating of the SNII thermal channel with f_E = 1 and the
+   * same temperature change (COLIBRE; Schaye et al. 2026, Sec. 3.7) */
+  char SNIa_model[PARSER_MAX_LINE_SIZE] = "Continuous";
+  parser_get_opt_param_string(params, "EAGLEFeedback:SNIa_feedback_model",
+                              SNIa_model, "Continuous");
+  if (strcmp(SNIa_model, "Continuous") == 0) {
+    fp->SNIa_stochastic = 0;
+  } else if (strcmp(SNIa_model, "Stochastic") == 0) {
+    fp->SNIa_stochastic = 1;
+  } else {
+    error("Invalid EAGLEFeedback:SNIa_feedback_model '%s'", SNIa_model);
+  }
 
   /* Constant temperature change, or one that scales with the gas density at
    * the star as in COLIBRE (Schaye et al. 2026, eq. 18) */

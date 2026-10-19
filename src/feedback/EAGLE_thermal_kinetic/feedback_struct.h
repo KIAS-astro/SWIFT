@@ -25,6 +25,9 @@
 /*! The total number of rays used in stellar feedback */
 #define eagle_SNII_feedback_num_of_rays FEEDBACK_NR_RAYS_SNII
 
+/*! The total number of rays used in stochastic SNIa feedback */
+#define eagle_SNIa_feedback_num_of_rays FEEDBACK_NR_RAYS_SNIa
+
 /**
  * @brief Feedback fields carried by each hydro particles
  */
@@ -128,6 +131,12 @@ struct feedback_spart_data {
       /*! Number of SNII energy injections in thermal form */
       int SNII_num_of_thermal_energy_inj;
 
+      /*! Change in specific internal energy per stochastic SNIa event */
+      float SNIa_delta_u;
+
+      /*! Number of stochastic SNIa energy injections */
+      int SNIa_num_of_thermal_energy_inj;
+
     } to_distribute;
   };
 
@@ -139,6 +148,9 @@ struct feedback_spart_data {
 
   /* Instantiate ray structs for SNII thermal feedback */
   struct ray_data SNII_rays_heat[eagle_SNII_feedback_num_of_rays];
+
+  /* Instantiate ray structs for stochastic SNIa feedback */
+  struct ray_data SNIa_rays[eagle_SNIa_feedback_num_of_rays];
 };
 
 #endif /* SWIFT_FEEDBACK_STRUCT_EAGLE_THERMAL_KINETIC_H */

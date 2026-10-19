@@ -122,6 +122,19 @@ runner_iact_nonsym_feedback_density(const float r2, const float dx[3],
                            ray_feedback_thermal, pj->id, rand_theta_heat,
                            rand_phi_heat, mj, /*ray_ext=*/NULL, /*v=*/NULL);
   }
+
+  /* Rays of the stochastic SNIa feedback */
+  for (int i = 0; i < eagle_SNIa_feedback_num_of_rays; i++) {
+
+    const double rand_theta_SNIa = random_unit_interval_part_ID_and_index(
+        si->id, i, ti_current, random_number_isotropic_SNIa_feedback_ray_theta);
+    const double rand_phi_SNIa = random_unit_interval_part_ID_and_index(
+        si->id, i, ti_current, random_number_isotropic_SNIa_feedback_ray_phi);
+
+    ray_minimise_arclength(dx, r, si->feedback_data.SNIa_rays + i,
+                           ray_feedback_thermal, pj->id, rand_theta_SNIa,
+                           rand_phi_SNIa, mj, /*ray_ext=*/NULL, /*v=*/NULL);
+  }
 }
 
 __attribute__((always_inline)) INLINE static void
@@ -570,6 +583,33 @@ runner_iact_nonsym_feedback_apply(
                                              delta_u, /*kick_velocity=*/0.f);
 
       /* Synchronize the particle on the timeline */
+      timestep_sync_part(pj);
+    }
+  }
+
+  /* Stochastic SNIa thermal feedback */
+  const int N_of_SNIa_energy_inj =
+      si->feedback_data.to_distribute.SNIa_num_of_thermal_energy_inj;
+
+  if (N_of_SNIa_energy_inj > 0) {
+
+    int N_of_SNIa_energy_inj_received_by_gas = 0;
+    for (int i = 0; i < N_of_SNIa_energy_inj; i++) {
+      if (pj->id == si->feedback_data.SNIa_rays[i].id_min_length)
+        N_of_SNIa_energy_inj_received_by_gas++;
+    }
+
+    if (N_of_SNIa_energy_inj_received_by_gas > 0) {
+
+      const double u_init = hydro_get_physical_internal_energy(pj, xpj, cosmo);
+      const float delta_u = si->feedback_data.to_distribute.SNIa_delta_u;
+      const double u_new =
+          u_init + delta_u * (float)N_of_SNIa_energy_inj_received_by_gas;
+
+      hydro_set_physical_internal_energy(pj, xpj, cosmo, u_new);
+      hydro_set_drifted_physical_internal_energy(pj, cosmo, /*pfloor=*/NULL,
+                                                 u_new);
+      hydro_diffusive_feedback_reset(pj);
       timestep_sync_part(pj);
     }
   }

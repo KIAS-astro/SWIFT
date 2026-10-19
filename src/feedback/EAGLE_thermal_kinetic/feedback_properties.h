@@ -262,6 +262,10 @@ struct feedback_props {
    * the density-dependent model, the value at the pivot density */
   float SNe_deltaT_desired;
 
+  /*! Is SNIa energy injected stochastically (COLIBRE) rather than spread over
+   * all neighbours every step (EAGLE)? */
+  int SNIa_stochastic;
+
   /*! Does the SNII temperature change depend on the density at the star? */
   int SNII_delta_T_density_dependent;
 

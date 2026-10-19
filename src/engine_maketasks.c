@@ -2481,6 +2481,12 @@ void engine_link_gravity_tasks_mapper(void *map_data, int num_elements,
       /* drift -----> gravity --> end_gravity_force */
       scheduler_addunlock(sched, ci->grav.super->grav.drift, t);
       scheduler_addunlock(sched, t, ci->grav.super->grav.end_force);
+
+      /* The self-gravity tasks and the down-pass add to the same particles'
+       * acceleration and potential without atomics or cell locks: run the
+       * external term after them. */
+      if (ci->grav.super->grav.down != NULL)
+        scheduler_addunlock(sched, ci->grav.super->grav.down, t);
     }
 
     /* Otherwise, pair interaction? */

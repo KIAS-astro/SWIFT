@@ -109,14 +109,26 @@ static void gravrace_check(const struct engine *e, const struct gpart *gp) {
     gravrace_events = fopen("gravrace_events.txt", "w");
     fprintf(gravrace_events,
             "# step type a_ref_norm a_ext_norm a_tree_norm da_norm "
-            "dax.a_ext/|a_ext|^2 pot_ref pot_ext dpot\n");
+            "dax.a_ext/|a_ext|^2 pot_ref pot_ext dpot dt v_norm r id\n");
   }
   if (gravrace_n_lines < 2000000) {
     double t2 = 0.;
     for (int k = 0; k < 3; k++) t2 += (double)gp->gr_a_tree[k] * gp->gr_a_tree[k];
-    fprintf(gravrace_events, "%d %d %.6e %.6e %.6e %.6e %.6e %.6e %.6e %.6e\n",
+    const double dt = e->time_base * get_integer_timestep(gp->time_bin);
+    const double v = sqrt((double)gp->v_full[0] * gp->v_full[0] +
+                          (double)gp->v_full[1] * gp->v_full[1] +
+                          (double)gp->v_full[2] * gp->v_full[2]);
+    double r2 = 0.;
+    for (int k = 0; k < 3; k++) {
+      const double dx = gp->x[k] - 0.5 * e->s->dim[k];
+      r2 += dx * dx;
+    }
+    fprintf(gravrace_events,
+            "%d %d %.6e %.6e %.6e %.6e %.6e %.6e %.6e %.6e %.6e %.6e %.6e "
+            "%lld\n",
             e->step, gp->type, sqrt(at2), sqrt(ae2), sqrt(t2), sqrt(da2),
-            ae2 > 0. ? dot / ae2 : 0., pref, (double)gp->gr_pot_ext, dpot);
+            ae2 > 0. ? dot / ae2 : 0., pref, (double)gp->gr_pot_ext, dpot, dt,
+            v, sqrt(r2), gp->id_or_neg_offset);
     gravrace_n_lines++;
   }
   pthread_mutex_unlock(&gravrace_mutex);

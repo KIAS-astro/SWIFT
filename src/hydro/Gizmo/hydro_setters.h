@@ -176,12 +176,26 @@ hydro_part_normalise_gradients(struct part *restrict p, const float norm) {
 /**
  * @brief Sets the mass of a particle
  *
+ * The velocity and the specific internal energy are the conserved momentum
+ * and energy divided by the mass, so these are scaled with the mass to keep
+ * both unchanged, as setting the mass does in the SPH schemes. Callers that
+ * change the velocity or energy as well (feedback, enrichment) do so
+ * afterwards.
+ *
  * @param p The particle of interest
  * @param m The mass to set.
  */
 __attribute__((always_inline)) INLINE static void hydro_set_mass(
     struct part *restrict p, float m) {
 
+  const float old_mass = p->conserved.mass;
+  if (old_mass > 0.0f) {
+    const float factor = m / old_mass;
+    p->conserved.momentum[0] *= factor;
+    p->conserved.momentum[1] *= factor;
+    p->conserved.momentum[2] *= factor;
+    p->conserved.energy *= factor;
+  }
   p->conserved.mass = m;
 }
 

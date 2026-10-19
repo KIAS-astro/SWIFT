@@ -12,10 +12,11 @@ SWIFT-star-formation/papers-part12-hopkins.md Sec. 2.3, tests 1 and 3):
   diff0  cooling, SPHENIX artificial conduction off (diffusion_alpha_max = 0);
   diff2  cooling, SPHENIX artificial conduction doubled (diffusion_alpha_max and
          diffusion_beta both 2: alpha_diff is capped by alpha_max and grows at a
-         rate proportional to beta, so both bounds double).
+         rate proportional to beta, so both bounds double);
+  adiab0 no cooling, SPHENIX artificial conduction off.
 
-SWIFT_REG_SNR_VARIANTS selects a comma-separated subset (default: all four for
-SPHENIX; diff0 and diff2 need SPHENIX). Outputs are log-spaced from 2 kyr to 1.5 Myr
+SWIFT_REG_SNR_VARIANTS selects a comma-separated subset (default: all five for
+SPHENIX; diff0, diff2 and adiab0 need SPHENIX). Outputs are log-spaced from 2 kyr to 1.5 Myr
 so that the early, pre-shell-formation phase is sampled.
 
 Checks: the adiabatic momentum at 0.1 Myr within 10 per cent of the Sedov-Taylor
@@ -39,7 +40,8 @@ BOX = 0.256  # kpc
 T_END = 1.5339e-3  # 1.5 Myr
 VARIANTS = {"cool": {}, "adiab": {},
             "diff0": {"diffusion_alpha_max": 0.0},
-            "diff2": {"diffusion_alpha_max": 2.0, "diffusion_beta": 2.0}}
+            "diff2": {"diffusion_alpha_max": 2.0, "diffusion_beta": 2.0},
+            "adiab0": {"diffusion_alpha_max": 0.0}}
 _only = os.environ.get("SWIFT_REG_SNR_VARIANTS")
 RUNS = {k: v for k, v in VARIANTS.items() if not _only or k in _only.split(",")}
 
@@ -70,7 +72,8 @@ def run(ctx):
         p["EAGLEEntropyFloor"].update({"Jeans_temperature_norm_K": 10.0,
                                        "Cool_temperature_norm_K": 10.0})
         p["SPH"].update(sph)
-        flags = ["--hydro", "--limiter"] + (["--temperature"] if name == "adiab" else ["--cooling"])
+        flags = ["--hydro", "--limiter"] + (["--temperature"] if name.startswith("adiab")
+                                             else ["--cooling"])
         ctx.swift(p, flags, subdir=name, name=name, timeout=24 * 3600)
 
 
@@ -81,8 +84,8 @@ def analyze(ctx):
         rows = history(ctx.path(name), box_kpc=BOX)
         ctx.info[f"{name}: t_yr_Mhot_Msun_pr_Msunkms_E_erg"] = rows.tolist()
         t, p_r = rows[:, 0], rows[:, 2]
-        if name == "adiab":
-            checks.append(Check("adiabatic: radial momentum at 0.1 Myr / Sedov-Taylor",
+        if name.startswith("adiab"):
+            checks.append(Check(f"{name}: radial momentum at 0.1 Myr / Sedov-Taylor",
                                 np.interp(1e5, t, p_r) / sedov_momentum(1e5, rho0), 1.0,
                                 kind="rel", tol=0.10, source="exact Sedov-Taylor solution"))
         else:

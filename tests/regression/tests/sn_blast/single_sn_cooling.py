@@ -31,6 +31,7 @@ background against KO15's cooling, and an ambient pressure about twice KO15's):
     note, ai-notes sn-experiments.md).
 """
 
+import os
 import numpy as np
 
 from swiftreg import params, units
@@ -41,7 +42,13 @@ from . import _common as c
 
 DESCRIPTION = "single SN with EAGLE cooling: shell formation and momentum against KO15"
 TIER = "long"
-BUILDS = {"eagle": ["--with-subgrid=EAGLE"]}
+# Hydro scheme from SWIFT_REG_HYDRO (default SPHENIX), to compare how schemes treat the
+# remnant; GIZMO schemes need a Riemann solver.
+HYDRO = os.environ.get("SWIFT_REG_HYDRO", "sphenix")
+BUILDS = {"eagle": ["--with-subgrid=EAGLE"] + ([] if HYDRO == "sphenix" else
+                                                [f"--with-hydro={HYDRO}"]
+                                                + (["--with-riemann-solver=hllc"]
+                                                   if HYDRO.startswith("gizmo") else []))}
 
 N = 64
 BOX = 0.128  # kpc

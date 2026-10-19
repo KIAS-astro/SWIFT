@@ -46,6 +46,8 @@ static INLINE float hydro_get_comoving_density(const struct part *restrict p);
 #include "./entropy_floor/QLA/entropy_floor.h"
 #elif defined(ENTROPY_FLOOR_EAGLE)
 #include "./entropy_floor/EAGLE/entropy_floor.h"
+#elif defined(ENTROPY_FLOOR_PRFM)
+#include "./entropy_floor/PRFM/entropy_floor.h"
 #else
 #error "Invalid choice of entropy floor"
 #endif

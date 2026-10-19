@@ -35,6 +35,8 @@
 #error TODO
 #elif defined(STAR_FORMATION_EAGLE)
 #error TODO
+#elif defined(STAR_FORMATION_PRFM)
+#error TODO
 #elif defined(STAR_FORMATION_GEAR)
 #include "./star_formation/GEAR/star_formation_csds.h"
 #else

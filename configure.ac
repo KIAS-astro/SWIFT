@@ -3139,7 +3139,7 @@ esac
 #  Entropy floor
 AC_ARG_WITH([entropy-floor],
     [AS_HELP_STRING([--with-entropy-floor=<floor>],
-       [entropy floor @<:@none, QLA, EAGLE, default: none@:>@]
+       [entropy floor @<:@none, QLA, EAGLE, PRFM, default: none@:>@]
     )],
     [with_entropy_floor="$withval"],
     [with_entropy_floor="none"]
@@ -3161,6 +3161,9 @@ case "$with_entropy_floor" in
    ;;
    EAGLE)
       AC_DEFINE([ENTROPY_FLOOR_EAGLE], [1], [EAGLE entropy floor])
+   ;;
+   PRFM)
+      AC_DEFINE([ENTROPY_FLOOR_PRFM], [1], [TIGRESS effective EoS (PRFM) entropy floor])
    ;;
    *)
       AC_MSG_ERROR([Unknown entropy floor model])
@@ -3199,7 +3202,7 @@ esac
 #  Star formation
 AC_ARG_WITH([star-formation],
     [AS_HELP_STRING([--with-star-formation=<sfm>],
-       [star formation @<:@none, QLA, EAGLE, GEAR, default: none@:>@]
+       [star formation @<:@none, QLA, EAGLE, PRFM, GEAR, default: none@:>@]
     )],
     [with_star_formation="$withval"],
     [with_star_formation="none"]
@@ -3221,6 +3224,9 @@ case "$with_star_formation" in
    ;;
    EAGLE)
       AC_DEFINE([STAR_FORMATION_EAGLE], [1], [EAGLE star formation model (Schaye and Dalla Vecchia (2008))])
+   ;;
+   PRFM)
+      AC_DEFINE([STAR_FORMATION_PRFM], [1], [PRFM star formation model (Ostriker and Kim (2022), PRFM-int of Jeffreson et al. (2026))])
    ;;
    GEAR)
       AC_DEFINE([STAR_FORMATION_GEAR], [1], [GEAR star formation model (Revaz and Jablonka (2018))])
@@ -3432,6 +3438,9 @@ AM_CONDITIONAL([HAVEGRACKLECOOLING], [test "$with_cooling" = "grackle"])
 # check if using EAGLE floor
 AM_CONDITIONAL([HAVEEAGLEFLOOR], [test "$with_entropy_floor" = "EAGLE"])
 
+# check if using PRFM floor
+AM_CONDITIONAL([HAVEPRFMFLOOR], [test "$with_entropy_floor" = "PRFM"])
+
 # check if using gear feedback
 AM_CONDITIONAL([HAVEGEARFEEDBACK], [test "$with_feedback" = "GEAR"])
 
@@ -3471,6 +3480,9 @@ AM_CONDITIONAL([HAVE_STAR_FORMATION_DEFAULT], [test "$with_star_formation" = "no
 
 # check if using GEAR star formation
 AM_CONDITIONAL([HAVE_STAR_FORMATION_GEAR], [test "$with_star_formation" = "GEAR"])
+
+# check if using PRFM star formation
+AM_CONDITIONAL([HAVE_STAR_FORMATION_PRFM], [test "$with_star_formation" = "PRFM"])
 
 # check if using multi softening gravity
 AM_CONDITIONAL([HAVE_GRAVITY_MULTISOFTENING], [test "$with_gravity" = "with-multi-softening"])

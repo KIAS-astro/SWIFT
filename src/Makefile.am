@@ -51,7 +51,7 @@ include_HEADERS += engine.h swift.h serial_io.h timers.h debug.h scheduler.h pro
 include_HEADERS += common_io.h single_io.h distributed_io.h map.h tools.h  partition_fixed_costs.h
 include_HEADERS += partition.h clocks.h parser.h physical_constants.h physical_constants_cgs.h potential.h version.h
 include_HEADERS += hydro_properties.h riemann.h threadpool.h cooling_io.h cooling.h cooling_struct.h cooling_properties.h cooling_debug.h
-include_HEADERS += statistics.h memswap.h cache.h runner_doiact_hydro_vec.h runner_doiact_undef.h profiler.h entropy_floor.h prfm_physics.h
+include_HEADERS += statistics.h memswap.h cache.h runner_doiact_hydro_vec.h runner_doiact_undef.h profiler.h entropy_floor.h prfm_physics.h prfm_map.h
 include_HEADERS += csds.h active.h timeline.h xmf.h gravity_properties.h gravity_derivatives.h
 include_HEADERS += gravity_softened_derivatives.h vector_power.h collectgroup.h hydro_space.h sort_part.h
 include_HEADERS += chemistry.h chemistry_additions.h chemistry_io.h chemistry_struct.h chemistry_debug.h
@@ -137,6 +137,18 @@ if HAVEEAGLEFLOOR
 EAGLE_FLOOR_SOURCES += entropy_floor/EAGLE/entropy_floor.c
 endif
 
+# source files for the PRFM star formation map
+PRFM_MAP_SOURCES =
+if HAVE_STAR_FORMATION_PRFM
+PRFM_MAP_SOURCES += prfm_map.c
+endif
+
+# source files for PRFM floor
+PRFM_FLOOR_SOURCES =
+if HAVEPRFMFLOOR
+PRFM_FLOOR_SOURCES += entropy_floor/PRFM/entropy_floor.c
+endif
+
 # Common source files for GEAR and GEAR-mechanical feedback
 GEAR_FEEDBACK_SOURCES =
 
@@ -217,6 +229,8 @@ AM_SOURCES += $(QLA_COOLING_SOURCES) $(QLA_EAGLE_COOLING_SOURCES)
 AM_SOURCES += $(EAGLE_COOLING_SOURCES) $(EAGLE_FEEDBACK_SOURCES)
 AM_SOURCES += $(GRACKLE_COOLING_SOURCES) $(GEAR_FEEDBACK_SOURCES)
 AM_SOURCES += $(EAGLE_FLOOR_SOURCES)
+AM_SOURCES += $(PRFM_FLOOR_SOURCES)
+AM_SOURCES += $(PRFM_MAP_SOURCES)
 AM_SOURCES += $(AGORA_FEEDBACK_SOURCES)
 AM_SOURCES += $(PS2020_COOLING_SOURCES)
 AM_SOURCES += $(SPHM1RT_RT_SOURCES)
@@ -404,6 +418,10 @@ nobase_noinst_HEADERS += star_formation/GEAR/star_formation_io.h star_formation/
 nobase_noinst_HEADERS += star_formation/GEAR/star_formation_csds.h star_formation/GEAR/star_formation_debug.h
 nobase_noinst_HEADERS += star_formation/GEAR/star_formation_setters.h
 nobase_noinst_HEADERS += star_formation/EAGLE/star_formation_logger.h star_formation/EAGLE/star_formation_logger_struct.h
+nobase_noinst_HEADERS += star_formation/PRFM/star_formation.h star_formation/PRFM/star_formation_struct.h
+nobase_noinst_HEADERS += star_formation/PRFM/star_formation_io.h star_formation/PRFM/star_formation_iact.h
+nobase_noinst_HEADERS += star_formation/PRFM/star_formation_debug.h
+nobase_noinst_HEADERS += star_formation/PRFM/star_formation_logger.h star_formation/PRFM/star_formation_logger_struct.h
 nobase_noinst_HEADERS += star_formation/GEAR/star_formation_logger.h star_formation/GEAR/star_formation_logger_struct.h
 nobase_noinst_HEADERS += star_formation/none/star_formation_logger.h star_formation/none/star_formation_logger_struct.h
 nobase_noinst_HEADERS += cooling/none/cooling.h cooling/none/cooling_struct.h
@@ -470,6 +488,7 @@ nobase_noinst_HEADERS += chemistry/QLA/chemistry_debug.h
 nobase_noinst_HEADERS += entropy_floor/none/entropy_floor.h
 nobase_noinst_HEADERS += entropy_floor/EAGLE/entropy_floor.h
 nobase_noinst_HEADERS += entropy_floor/QLA/entropy_floor.h
+nobase_noinst_HEADERS += entropy_floor/PRFM/entropy_floor.h
 nobase_noinst_HEADERS += tracers/none/tracers.h tracers/none/tracers_struct.h
 nobase_noinst_HEADERS += tracers/none/tracers_io.h tracers/none/tracers_debug.h
 nobase_noinst_HEADERS += tracers/EAGLE/tracers.h tracers/EAGLE/tracers_struct.h

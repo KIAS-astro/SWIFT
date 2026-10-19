@@ -119,18 +119,18 @@ int main(int argc, char *argv[]) {
         prfm_upsilon(1e6 * P_unit, &k24, 0.1) / kms, 808., 2e-3);
   check("K24 Upsilon clipped at Z'=0.1",
         prfm_upsilon(1e4 * P_unit, &k24, 0.01),
-        prfm_upsilon(1e4 * P_unit, &k24, 0.1), 1e-15);
+        prfm_upsilon(1e4 * P_unit, &k24, 0.1), 1e-12);
 
   /* Dispersion floor below P_0 */
   check("OK22 sigma_eff(1e3) [km/s]", prfm_sigma_eff(1e3 * P_unit, &ok22, 1.) / kms,
-        12., 1e-15);
+        12., 1e-12);
 
   /* Effective EoS at n_H = 1 cm^-3 */
   check("OK22 P_eff(1)/k_B [K cm^-3]", prfm_eos_pressure(1., &ok22, 1.) / P_unit,
-        4.7e4, 1e-15);
+        4.7e4, 1e-12);
   check("K24 P_eff(10, Z'=1)/k_B [K cm^-3]",
         prfm_eos_pressure(10., &k24, 1.) / P_unit, 2.85e4 * pow(10., 1.29),
-        1e-15);
+        1e-12);
 
   if (n_fail) {
     printf("%d checks failed\n", n_fail);

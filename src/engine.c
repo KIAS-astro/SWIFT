@@ -98,6 +98,9 @@
 #include "sink_properties.h"
 #include "sort_part.h"
 #include "star_formation.h"
+#ifdef STAR_FORMATION_PRFM
+#include "prfm_map.h"
+#endif
 #include "star_formation_logger.h"
 #include "stars_io.h"
 #include "statistics.h"
@@ -2982,6 +2985,12 @@ int engine_step(struct engine *e) {
 
   /* Zero the list of cells that have had their time-step updated */
   bzero(e->s->cells_top_updated, e->s->nr_cells * sizeof(char));
+
+#ifdef STAR_FORMATION_PRFM
+  /* Surface densities for the star formation tasks of this step */
+  if (e->policy & engine_policy_star_formation)
+    prfm_map_build(e, &e->star_formation->map);
+#endif
 
   /* Start all the tasks. */
   TIMER_TIC;

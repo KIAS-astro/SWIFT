@@ -34,6 +34,8 @@
 #include "./star_formation/none/star_formation_logger.h"
 #elif defined(STAR_FORMATION_EAGLE)
 #include "./star_formation/EAGLE/star_formation_logger.h"
+#elif defined(STAR_FORMATION_PRFM)
+#include "./star_formation/PRFM/star_formation_logger.h"
 #elif defined(STAR_FORMATION_GEAR)
 #include "./star_formation/GEAR/star_formation_logger.h"
 #else

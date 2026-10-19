@@ -33,6 +33,43 @@
 #include "riemann_checks.h"
 #include "riemann_vacuum.h"
 
+/**
+ * @brief Wave speed estimates for the HLLC solver, relative to the left and
+ * right normal velocities (S_L - u_L and S_R - u_R).
+ *
+ * Roe-averaged (Einfeldt 1988) estimates, S_L = min(u_L - a_L, u_Roe - a_Roe)
+ * and S_R = max(u_R + a_R, u_Roe + a_Roe), as used by GIZMO (Hopkins 2015,
+ * appendix A). Unlike the pressure-based estimates from a linearised star
+ * pressure, these stay correct for strongly colliding cold flows, where the
+ * linearised pressure goes to zero with the sound speed.
+ *
+ * @param WL Left state.
+ * @param WR Right state.
+ * @param uL Left velocity along the interface normal.
+ * @param uR Right velocity along the interface normal.
+ * @param aL Left sound speed.
+ * @param aR Right sound speed.
+ * @param SLmuL (return) S_L - u_L.
+ * @param SRmuR (return) S_R - u_R.
+ */
+__attribute__((always_inline)) INLINE static void riemann_hllc_wave_speeds(
+    const float *WL, const float *WR, const float uL, const float uR,
+    const float aL, const float aR, float *SLmuL, float *SRmuR) {
+
+  const float sqrt_rhoL = sqrtf(WL[0]);
+  const float sqrt_rhoR = sqrtf(WR[0]);
+  const float norm = 1.0f / (sqrt_rhoL + sqrt_rhoR);
+  const float u_roe = (sqrt_rhoL * uL + sqrt_rhoR * uR) * norm;
+  const float HL = aL * aL * hydro_one_over_gamma_minus_one + 0.5f * uL * uL;
+  const float HR = aR * aR * hydro_one_over_gamma_minus_one + 0.5f * uR * uR;
+  const float H_roe = (sqrt_rhoL * HL + sqrt_rhoR * HR) * norm;
+  const float a_roe =
+      sqrtf(max(0.0f, hydro_gamma_minus_one * (H_roe - 0.5f * u_roe * u_roe)));
+
+  *SLmuL = min(-aL, u_roe - a_roe - uL);
+  *SRmuR = max(aR, u_roe + a_roe - uR);
+}
+
 __attribute__((always_inline)) INLINE static void riemann_solve_for_flux(
     const float *WL, const float *WR, const float *n, const float *vij,
     float *totflux) {
@@ -65,27 +102,10 @@ __attribute__((always_inline)) INLINE static void riemann_solve_for_flux(
     return;
   }
 
-  /* STEP 1: pressure estimate */
-  const float rhobar = WL[0] + WR[0];
-  const float abar = aL + aR;
-  const float pPVRS =
-      0.5f * ((WL[4] + WR[4]) - 0.25f * (uR - uL) * rhobar * abar);
-  const float pstar = max(0.0f, pPVRS);
-
-  /* STEP 2: wave speed estimates
+  /* STEP 1 and 2: wave speed estimates
      all these speeds are along the interface normal, since uL and uR are */
-  float qL = 1.0f;
-  if (pstar > WL[4] && WL[4] > 0.0f) {
-    qL = sqrtf(1.0f + 0.5f * hydro_gamma_plus_one * hydro_one_over_gamma *
-                          (pstar / WL[4] - 1.0f));
-  }
-  float qR = 1.0f;
-  if (pstar > WR[4] && WR[4] > 0.0f) {
-    qR = sqrtf(1.0f + 0.5f * hydro_gamma_plus_one * hydro_one_over_gamma *
-                          (pstar / WR[4] - 1.0f));
-  }
-  const float SLmuL = -aL * qL;
-  const float SRmuR = aR * qR;
+  float SLmuL, SRmuR;
+  riemann_hllc_wave_speeds(WL, WR, uL, uR, aL, aR, &SLmuL, &SRmuR);
   const float Sstar =
       (WR[4] - WL[4] + WL[0] * uL * SLmuL - WR[0] * uR * SRmuR) /
       (WL[0] * SLmuL - WR[0] * SRmuR);
@@ -207,30 +227,19 @@ riemann_solve_for_middle_state_flux(const float *WL, const float *WR,
     return;
   }
 
-  /* STEP 1: pressure estimate */
-  const float rhobar = WL[0] + WR[0];
-  const float abar = aL + aR;
-  const float pPVRS =
-      0.5f * ((WL[4] + WR[4]) - 0.25f * (uR - uL) * rhobar * abar);
-  const float pstar = max(0.f, pPVRS);
-
-  /* STEP 2: wave speed estimates
+  /* STEP 1 and 2: wave speed estimates
      all these speeds are along the interface normal, since uL and uR are */
-  float qL = 1.0f;
-  if (pstar > WL[4] && WL[4] > 0.0f) {
-    qL = sqrtf(1.0f + 0.5f * hydro_gamma_plus_one * hydro_one_over_gamma *
-                          (pstar / WL[4] - 1.0f));
-  }
-  float qR = 1.0f;
-  if (pstar > WR[4] && WR[4] > 0.0f) {
-    qR = sqrtf(1.0f + 0.5f * hydro_gamma_plus_one * hydro_one_over_gamma *
-                          (pstar / WR[4] - 1.0f));
-  }
-  const float SLmuL = -aL * qL;
-  const float SRmuR = aR * qR;
+  float SLmuL, SRmuR;
+  riemann_hllc_wave_speeds(WL, WR, uL, uR, aL, aR, &SLmuL, &SRmuR);
   const float Sstar =
       (WR[4] - WL[4] + WL[0] * uL * SLmuL - WR[0] * uR * SRmuR) /
       (WL[0] * SLmuL - WR[0] * SRmuR);
+
+  /* HLLC star-region pressure (Toro 2009, eq. 10.42); the two sides agree
+     by the definition of Sstar up to round-off */
+  const float pstar =
+      max(0.0f, 0.5f * (WL[4] + WL[0] * SLmuL * (Sstar - uL) + WR[4] +
+                        WR[0] * SRmuR * (Sstar - uR)));
 
   totflux[0] = 0.0f;
   totflux[1] = pstar * n[0];

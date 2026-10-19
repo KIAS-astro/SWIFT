@@ -120,6 +120,27 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /* Smith et al. (2024a) Table 2 LowSpec and HighSpec, as run by the
+   * isolated_galaxy/arkenstone_va regression test: eta_E = eta_E,kin +
+   * eta_E,th and kinetic_fraction = eta_E,kin / eta_E. The table gives three
+   * digits, so the tolerance is 3e-3. */
+  {
+    const double eM[2] = {6.41, 0.32}, eK[2] = {0.869, 0.321},
+                 eT[2] = {0.097, 0.579}, dv_tab[2] = {378., 1028.},
+                 cs_tab[2] = {94., 1028.};
+    const char *names[2] = {"LowSpec", "HighSpec"};
+    for (int i = 0; i < 2; i++) {
+      double dv, u_w;
+      wind_launch_kinematics(u_star, eM[i], eK[i] + eT[i],
+                             eK[i] / (eK[i] + eT[i]), &dv, &u_w);
+      char name[96];
+      sprintf(name, "S24a %s: Delta v [km/s]", names[i]);
+      check(name, dv / kms, dv_tab[i], 3e-3);
+      sprintf(name, "S24a %s: c_s [km/s]", names[i]);
+      check(name, sqrt(5. / 3. * 2. / 3. * u_w) / kms, cs_tab[i], 3e-3);
+    }
+  }
+
   /* The draw */
   check_draw(0.01, 0.005);
   check_draw(0.3, 0.06);

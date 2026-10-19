@@ -406,6 +406,7 @@ nobase_noinst_HEADERS += potential/isothermal/potential.h potential/disc_patch/p
 nobase_noinst_HEADERS += potential/sine_wave/potential.h potential/constant/potential.h
 nobase_noinst_HEADERS += potential/hernquist/potential.h potential/nfw/potential.h
 nobase_noinst_HEADERS += potential/nfw_mn/potential.h potential/point_mass_softened/potential.h
+nobase_noinst_HEADERS += potential/nfw_dk/potential.h
 nobase_noinst_HEADERS += star_formation/none/star_formation.h star_formation/none/star_formation_struct.h
 nobase_noinst_HEADERS += star_formation/none/star_formation_io.h star_formation/none/star_formation_iact.h
 nobase_noinst_HEADERS += star_formation/none/star_formation_csds.h star_formation/none/star_formation_debug.h

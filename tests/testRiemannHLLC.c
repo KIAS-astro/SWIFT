@@ -54,8 +54,11 @@ int are_symmetric(float a, float b) {
 
   const float abs_error = fabsf(abs_a - abs_b);
 
-  /* Check that we do not breach the absolute error limit */
-  if (abs_error > max_abs_error) {
+  /* Check that we do not breach the absolute error limit. Fluxes between
+     colliding states reach ~1e3 (rho v^2 with |v| up to 10 on each side),
+     where single-precision round-off alone is ~1e-4, so the limit grows with
+     the size of the flux. */
+  if (abs_error > max_abs_error * fmaxf(1.f, 0.5f * (abs_a + abs_b))) {
     message("Absolute error too large a=%.8e b=%.8e abs=%.8e", a, b, abs_error);
     return 0;
   }
@@ -148,6 +151,40 @@ void check_riemann_symmetry(void) {
 }
 
 /**
+ * @brief Check the star-region pressure that the MFM flux uses against the
+ * exact solution of the Riemann problem.
+ *
+ * Exact values (gamma = 5/3) from Toro (2009), ch. 4, computed with an
+ * independent solver. An approximate solver on unreconstructed states is
+ * allowed a factor 2; the linearised (PVRS) pressure fails the cold
+ * collisions, where it scales with the sound speed instead of rho v^2
+ * (0.05 of the exact value at v = +-20).
+ */
+void check_riemann_middle_state_pressure(void) {
+
+  /* rho_L, v_L, P_L, rho_R, v_R, P_R, exact P* */
+  const float cases[6][7] = {{1.f, 0.f, 1.f, 0.125f, 0.f, 0.1f, 0.2939f},
+                             {1.f, 0.f, 1e3f, 1.f, 0.f, 1.f, 446.3f},
+                             {1.f, 0.f, 1e5f, 1.f, 0.f, 1.f, 4.456e4f},
+                             {1.f, 2.f, 1.f, 1.f, -2.f, 1.f, 7.379f},
+                             {1.f, 20.f, 1.f, 1.f, -20.f, 1.f, 535.6f},
+                             {1.f, 0.f, 1e4f, 10.f, 0.f, 1.f, 7320.f}};
+  const float n_unit[3] = {1.f, 0.f, 0.f};
+  const float vij[3] = {0.f, 0.f, 0.f};
+
+  for (int i = 0; i < 6; i++) {
+    const float WL[5] = {cases[i][0], cases[i][1], 0.f, 0.f, cases[i][2]};
+    const float WR[5] = {cases[i][3], cases[i][4], 0.f, 0.f, cases[i][5]};
+    float totflux[5];
+    riemann_solve_for_middle_state_flux(WL, WR, n_unit, vij, totflux);
+    const float ratio = totflux[1] / cases[i][6];
+    if (ratio < 0.5f || ratio > 2.f)
+      error("Case %d: star pressure %.4e, exact %.4e (ratio %.3f)", i,
+            totflux[1], cases[i][6], ratio);
+  }
+}
+
+/**
  * @brief Check the HLLC Riemann solver
  */
 int main(int argc, char *argv[]) {
@@ -165,6 +202,9 @@ int main(int argc, char *argv[]) {
   const int seed = time(NULL);
   message("Seed = %d", seed);
   srand(seed);
+
+  /* star pressure against the exact solution */
+  check_riemann_middle_state_pressure();
 
   /* symmetry test */
   for (int i = 0; i < 100000; i++) {

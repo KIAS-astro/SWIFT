@@ -121,16 +121,43 @@ int main(int argc, char *argv[]) {
         prfm_upsilon(1e4 * P_unit, &k24, 0.01),
         prfm_upsilon(1e4 * P_unit, &k24, 0.1), 1e-12);
 
-  /* Dispersion floor below P_0 */
+  /* Dispersion floor below P_0: OK22 (J26 Sec. 2.5) only; K24 eq. 23 is
+   * fitted down to 10^3.1 K cm^-3 and gives 8.9 km/s at 1e3 */
   check("OK22 sigma_eff(1e3) [km/s]", prfm_sigma_eff(1e3 * P_unit, &ok22, 1.) / kms,
         12., 1e-12);
+  check("K24 sigma_eff(1e3, Z'=1) [km/s], no floor",
+        prfm_sigma_eff(1e3 * P_unit, &k24, 1.) / kms, 11.7 * pow(10., -0.12),
+        1e-12);
 
   /* Effective EoS at n_H = 1 cm^-3 */
   check("OK22 P_eff(1)/k_B [K cm^-3]", prfm_eos_pressure(1., &ok22, 1.) / P_unit,
         4.7e4, 1e-12);
-  check("K24 P_eff(10, Z'=1)/k_B [K cm^-3]",
-        prfm_eos_pressure(10., &k24, 1.) / P_unit, 2.85e4 * pow(10., 1.29),
-        1e-12);
+
+  /* K24 EoS implied by eq. 23, against its rounded form 3.03e4 n_H^1.316
+   * Z'^0.079 (prfm-method-spec.md Sec. 1.3); tolerance half a unit in the
+   * last printed digit */
+  check("K24 EoS P/k_B at n_H = 1, Z' = 1 [K cm^-3]",
+        prfm_eos_pressure(1., &k24, 1.) / P_unit, 3.03e4, 0.005 / 3.03);
+  check("K24 EoS slope", k24.eos_slope, 1.316, 0.0005 / 1.316);
+  check("K24 EoS metallicity exponent", k24.eos_Z, 0.079, 0.0005 / 0.079);
+
+  /* K24 EoS consistency: P_eff at the equilibrium density W / sigma_eff(W)^2
+   * returns W (exact up to rounding) */
+  {
+    const double Ws[4] = {1e3, 1e4, 1e5, 1e6};
+    const double Zs[3] = {1., 0.3, 0.1};
+    for (int i = 0; i < 4; i++) {
+      for (int j = 0; j < 3; j++) {
+        const double W = Ws[i] * P_unit;
+        const double s = prfm_sigma_eff(W, &k24, Zs[j]);
+        const double n_eq =
+            W / (s * s) / (PRFM_MASS_PER_H * PRFM_PROTON_MASS_CGS);
+        char name[80];
+        sprintf(name, "K24 P_eff(n_eq)/W, W/k_B = %g, Z' = %g", Ws[i], Zs[j]);
+        check(name, prfm_eos_pressure(n_eq, &k24, Zs[j]) / W, 1., 1e-10);
+      }
+    }
+  }
 
   if (n_fail) {
     printf("%d checks failed\n", n_fail);

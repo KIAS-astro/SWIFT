@@ -156,7 +156,7 @@ void entropy_floor_init(struct entropy_floor_properties *props,
       params, "PRFMEntropyFloor:density_threshold_H_p_cm3", 0.13);
   props->solar_metallicity_inv =
       1. / parser_get_opt_param_double(
-               params, "PRFMEntropyFloor:solar_metallicity", 0.0134);
+               params, "PRFMEntropyFloor:solar_metallicity", 0.014);
 
   const double rho_to_cgs = units_cgs_conversion_factor(us, UNIT_CONV_DENSITY);
   const double m_H_cgs =

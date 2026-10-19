@@ -40,8 +40,9 @@ struct swift_params;
  * @brief The TIGRESS effective equation of state used as a pressure floor.
  *
  * Above n_H = rho / (1.4 m_H) >= n_th the pressure is held at or above
- * P_eff(n_H): OK22 (J26) P/k_B = 4.7e4 n_H^1.8 K cm^-3, or K24
- * P/k_B = 2.85e4 n_H^1.29 Z'^-0.10. Below n_th there is no floor.
+ * P_eff(n_H): OK22 (J26) P/k_B = 4.7e4 n_H^1.8 K cm^-3, or for K24 the EoS
+ * implied by the K24 sigma_eff fit, P/k_B = 3.03e4 n_H^1.316 Z'^0.079
+ * (src/prfm_physics.h). Below n_th there is no floor.
  * It is applied wherever the EAGLE floor is (cooling and hydro kick), through
  * the same interface.
  */

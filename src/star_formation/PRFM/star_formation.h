@@ -482,6 +482,9 @@ INLINE static void starformation_init_backend(
   else
     error("PRFMStarFormation:calibration must be OK22 or K24, got '%s'", cal);
   prfm_calibration_init(starform->cal_choice, &starform->cal);
+  starform->cal.sigma_floor = parser_get_opt_param_int(
+      parameter_file, "PRFMStarFormation:sigma_eff_floor",
+      starform->cal.sigma_floor);
 
   starform->c_d = parser_get_opt_param_double(
       parameter_file, "PRFMStarFormation:c_d", 16. * M_PI / 3.);
@@ -489,7 +492,7 @@ INLINE static void starformation_init_backend(
       parameter_file, "PRFMStarFormation:n_iterations", 5);
   starform->solar_metallicity_inv =
       1. / parser_get_opt_param_double(
-               parameter_file, "PRFMStarFormation:solar_metallicity", 0.0134);
+               parameter_file, "PRFMStarFormation:solar_metallicity", 0.014);
 
   char thr[32] = "measured";
   parser_get_opt_param_string(parameter_file, "PRFMStarFormation:threshold",
@@ -558,10 +561,11 @@ INLINE static void starformation_print_backend(
       starform->cal_choice == prfm_calibration_K24 ? "K24" : "OK22");
   message(
       "Upsilon = %.4g km/s (W/P0)^-%.3g Z'^%.3g, sigma_eff = %.4g km/s "
-      "max(W/P0,1)^%.3g Z'^%.3g, c_d = %.4g, %d iterations",
+      "%s^%.3g Z'^%.3g, c_d = %.4g, %d iterations",
       starform->cal.upsilon0 / 1e5, starform->cal.alpha, starform->cal.upsilon_Z,
-      starform->cal.sigma0 / 1e5, starform->cal.beta, starform->cal.sigma_Z,
-      starform->c_d, starform->n_iter);
+      starform->cal.sigma0 / 1e5,
+      starform->cal.sigma_floor ? "max(W/P0,1)" : "(W/P0)", starform->cal.beta,
+      starform->cal.sigma_Z, starform->c_d, starform->n_iter);
   message(
       "Threshold n_H >= %.3g cm^-3 (%s density), and T < %.3g K or entropy "
       "within %.3g dex of the floor",

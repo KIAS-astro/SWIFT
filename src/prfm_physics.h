@@ -32,7 +32,8 @@
  * g cm^-3, velocities in cm s^-1, pressures and weights in erg cm^-3 (the
  * calibrations are written in P/k_B [K cm^-3], converted here with
  * PRFM_BOLTZMANN_K_CGS), lengths in cm, times in s. Metallicity Z' is in
- * solar units and is clipped below at 0.1, the lowest calibrated value.
+ * solar units (Z_sun = 0.014, K24 Sec. 2.3) and is clipped below at 0.1, the
+ * lowest calibrated value.
  */
 
 /* Some standard headers. */
@@ -43,6 +44,12 @@
 
 /*! Boltzmann's constant [erg K^-1], as src/physical_constants_cgs.h */
 #define PRFM_BOLTZMANN_K_CGS 1.380649e-16
+
+/*! Proton mass [g], as src/physical_constants_cgs.h */
+#define PRFM_PROTON_MASS_CGS 1.67262192369e-24
+
+/*! Mass per hydrogen atom in units of m_H (J26: n_H = rho / 1.4 m_H) */
+#define PRFM_MASS_PER_H 1.4
 
 /*! Reference pressure P_0 / k_B of the calibrations [K cm^-3] */
 #define PRFM_P0_OVER_KB 1e4
@@ -57,7 +64,8 @@
  * @brief The calibration of yield, dispersion and effective EoS.
  *
  * Upsilon_tot = upsilon0 (W/P_0)^-alpha Z'^upsilon_Z,
- * sigma_eff = sigma0 max(W/P_0, 1)^beta Z'^sigma_Z,
+ * sigma_eff = sigma0 x^beta Z'^sigma_Z, x = W/P_0, or max(W/P_0, 1) with
+ * the floor,
  * P_eff/k_B = eos_norm n_H^eos_slope Z'^eos_Z, with n_H in cm^-3.
  */
 struct prfm_calibration {
@@ -79,6 +87,9 @@ struct prfm_calibration {
 
   /*! Metallicity exponent of the dispersion */
   double sigma_Z;
+
+  /*! Hold sigma_eff at its value at P_0 below P_0? */
+  int sigma_floor;
 
   /*! Effective EoS P/k_B at n_H = 1 cm^-3 [K cm^-3] */
   double eos_norm;
@@ -122,8 +133,15 @@ struct prfm_state {
 /**
  * @brief Fill a calibration.
  *
- * OK22 eqs. 25c (yield) and 22 (dispersion) with the J26 EoS
- * P/k_B = 4.7e4 n_H^1.8; K24 eqs. for Upsilon, sigma_eff and P_eff with Z'.
+ * OK22: eqs. 25c (yield) and Sec. 4.6 (dispersion), with the J26 EoS
+ * P/k_B = 4.7e4 n_H^1.8 and the J26 floor sigma_eff = 12 km/s below P_0.
+ *
+ * K24: eqs. 20 (yield) and 23 (dispersion), with no dispersion floor (eq. 23
+ * is fitted down to W/k_B = 10^3.1 K cm^-3), and the EoS implied by eq. 23:
+ * P = sigma_eff(P)^2 rho gives
+ * P = P_0 [rho sigma0^2 Z'^(2 sigma_Z) / P_0]^(1/(1 - 2 beta)),
+ * i.e. P/k_B = 3.03e4 n_H^1.316 Z'^0.079, so that the EoS pressure at the
+ * equilibrium density W / sigma_eff^2 equals W.
  *
  * @param choice Which calibration.
  * @param cal (return) The calibration.
@@ -137,9 +155,13 @@ static inline void prfm_calibration_init(enum prfm_calibration_choice choice,
     cal->sigma0 = 11.7e5;
     cal->beta = 0.12;
     cal->sigma_Z = 0.03;
-    cal->eos_norm = 2.85e4;
-    cal->eos_slope = 1.29;
-    cal->eos_Z = -0.10;
+    cal->sigma_floor = 0;
+    const double P0 = PRFM_P0_OVER_KB * PRFM_BOLTZMANN_K_CGS;
+    const double n0 = P0 / (cal->sigma0 * cal->sigma0 * PRFM_MASS_PER_H *
+                            PRFM_PROTON_MASS_CGS);
+    cal->eos_slope = 1. / (1. - 2. * cal->beta);
+    cal->eos_norm = PRFM_P0_OVER_KB * pow(n0, -cal->eos_slope);
+    cal->eos_Z = 2. * cal->sigma_Z * cal->eos_slope;
   } else {
     cal->upsilon0 = 1028e5;
     cal->alpha = 0.212;
@@ -147,6 +169,7 @@ static inline void prfm_calibration_init(enum prfm_calibration_choice choice,
     cal->sigma0 = 12e5;
     cal->beta = 0.22;
     cal->sigma_Z = 0.;
+    cal->sigma_floor = 1;
     cal->eos_norm = 4.7e4;
     cal->eos_slope = 1.8;
     cal->eos_Z = 0.;
@@ -173,13 +196,13 @@ static inline double prfm_upsilon(const double W,
 
 /**
  * @brief Effective velocity dispersion [cm s^-1] at weight W [erg cm^-3],
- * held at sigma0 (12 km/s for OK22) below P_0.
+ * held at its P_0 value below P_0 if the calibration has the floor (OK22).
  */
 static inline double prfm_sigma_eff(const double W,
                                     const struct prfm_calibration *cal,
                                     const double Zprime) {
   double x = W / (PRFM_P0_OVER_KB * PRFM_BOLTZMANN_K_CGS);
-  if (x < 1.) x = 1.;
+  if (cal->sigma_floor && x < 1.) x = 1.;
   return cal->sigma0 * pow(x, cal->beta) *
          pow(prfm_clip_Zprime(Zprime), cal->sigma_Z);
 }

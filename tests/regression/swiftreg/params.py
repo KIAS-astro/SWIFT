@@ -65,6 +65,23 @@ EAGLE_SOLAR_ABUNDANCES = {
 }
 
 
+def eagle_abundances(metal_mass_fraction):
+    """EAGLEChemistry initial abundances with total metal mass fraction Z.
+
+    Every metal entry of EAGLE_SOLAR_ABUNDANCES is scaled by one factor; H and
+    He take up the metal mass removed, in their solar ratio, so the mass
+    fractions still sum to 1.
+    """
+    solar = EAGLE_SOLAR_ABUNDANCES
+    f = metal_mass_fraction / solar["init_abundance_metal"]
+    out = {k: v * f for k, v in solar.items()}
+    x, y = solar["init_abundance_Hydrogen"], solar["init_abundance_Helium"]
+    scale = (x + y + (1.0 - f) * solar["init_abundance_metal"]) / (x + y)
+    out["init_abundance_Hydrogen"] = x * scale
+    out["init_abundance_Helium"] = y * scale
+    return out
+
+
 def eagle_base(ic_file, time_end, data_dir, snapshot_dt, dt_max=1e-3):
     """Parameters for a non-cosmological, periodic EAGLE-physics test box.
 

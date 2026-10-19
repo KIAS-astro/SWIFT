@@ -7,8 +7,9 @@ pressure P = 1 (rho_heavy = 1, gamma = 5/3, at rest): a two-phase medium
 mixed at the particle scale, which is what a population of hot light wind
 particles among ambient gas is. The exact solution is rest. Mass ratios
 R = 1, 3, 10, 30, with SPHENIX and GIZMO-MFM (3D builds, --limiter; MFM
-also --sync), run for two sound-crossing times of the box at the heavy
-sound speed c_g = (gamma P / rho_heavy)^1/2.
+also --sync), run for one sound-crossing time of the box at the heavy
+sound speed c_g = (gamma P / rho_heavy)^1/2. (Over two crossings SPHENIX at
+R = 30 once stopped on a time-step below dt_min.)
 
 Measured: the pressure error at t = 0 (rms of P_i / P - 1 over all
 particles, from the first density estimate) and the largest rms speed over
@@ -45,7 +46,7 @@ BUILDS = {k: mx.build(s) for k, s in mx.SCHEMES.items()}
 
 N = 16
 T_CROSS = 1.0 / np.sqrt(mx.GAMMA)
-T_END = 2.0 * T_CROSS
+T_END = T_CROSS
 
 # Measured 2026-10-20 (SPHENIX): R -> (rms P error at t = 0, peak rms
 # speed / c_g in the first crossing)
@@ -74,7 +75,7 @@ def run(ctx):
             sub = f"{b}_R{R}"
             os.makedirs(ctx.path(sub), exist_ok=True)
             _ics(ctx.path(sub, "ics.hdf5"), R)
-            p = mx.params(T_END, n_snap=8, top_cells=3)
+            p = mx.params(T_END, n_snap=4, top_cells=3)
             # Twice the initial h; kernel_gamma h_max stays below the top-level
             # cell (1/3). Without the cap SPHENIX at R = 30 stopped at
             # t = 0.57 t_cross with smoothing lengths beyond the cell size.

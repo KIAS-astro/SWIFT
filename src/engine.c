@@ -1629,6 +1629,11 @@ int engine_prepare(struct engine *e) {
       engine_drift_all(e, /*drift_mpole=*/0, /*init_particles=*/1);
     drifted_all = 1;
 
+    /* Light wind particles: merge while the old cells still index the
+     * particles, then spawn (which may reallocate the arrays) */
+    engine_light_merge(e);
+    engine_light_spawn(e);
+
     engine_split_gas_particles(e);
   }
 
@@ -2869,6 +2874,9 @@ int engine_step(struct engine *e) {
     csds_ensure_size(e->csds, e);
   }
 #endif
+
+  /* Light wind particles are spawned and merged at rebuilds only */
+  if (engine_light_needs_rebuild(e)) e->forcerebuild = 1;
 
   /* Are we drifting everything (a la Gadget/GIZMO) ? */
   if (e->policy & engine_policy_drift_all && !e->forcerebuild)

@@ -72,6 +72,13 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                const double time,
                                const integertime_t ti_current) {}
 
+INLINE static void wind_light_accumulate(struct part *p,
+                                         const struct xpart *xp,
+                                         const struct wind_props *props,
+                                         const double dt_star) {}
+
+INLINE static void wind_part_becomes_star(struct part *p) {}
+
 INLINE static int wind_should_recouple(const struct part *p,
                                        const struct wind_props *props,
                                        const double time) {

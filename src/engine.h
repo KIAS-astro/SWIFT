@@ -809,6 +809,11 @@ void engine_make_fof_tasks(struct engine *e);
 void engine_split_gas_particles(struct engine *e);
 void engine_init_split_gas_particles(struct engine *e);
 
+/* Function prototypes, engine_light_particles.c. */
+void engine_light_merge(struct engine *e);
+void engine_light_spawn(struct engine *e);
+int engine_light_needs_rebuild(const struct engine *e);
+
 #ifdef HAVE_SETAFFINITY
 cpu_set_t *engine_entry_affinity(void);
 #endif

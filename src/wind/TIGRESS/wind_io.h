@@ -36,7 +36,11 @@ INLINE static int wind_read_particles(struct part *parts,
                                       struct io_props *list) {
   list[0] = io_make_input_field("WindDecoupled", CHAR, 1, OPTIONAL,
                                 UNIT_CONV_NO_UNITS, parts, wind_data.decoupled);
-  return 1;
+  list[1] = io_make_input_field("WindLight", CHAR, 1, OPTIONAL,
+                                UNIT_CONV_NO_UNITS, parts, wind_data.light);
+  list[2] = io_make_input_field("WindDye", FLOAT, 1, OPTIONAL,
+                                UNIT_CONV_NO_UNITS, parts, wind_data.dye);
+  return 3;
 }
 
 /**
@@ -97,7 +101,28 @@ INLINE static int wind_write_particles(const struct part *parts,
       parts, wind_data.d_rec,
       "Recoupling distance of the last launch, max(d_rec, factor x kernel "
       "support at launch)");
-  return 12;
+  list[12] = io_make_output_field(
+      "WindLight", CHAR, 1, UNIT_CONV_NO_UNITS, 0.f, parts, wind_data.light,
+      "1 for a light wind particle (Wind:mode light) until it has been "
+      "merged back to at least half the base gas mass");
+  list[13] = io_make_output_field(
+      "WindDye", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f, parts, wind_data.dye,
+      "Refinement dye f_w of a light particle at the time WindDyeTimes; "
+      "f_w(t) = WindDye exp[-(t - WindDyeTimes) / t_0]");
+  list[14] = io_make_output_field(
+      "WindDyeTimes", FLOAT, 1, UNIT_CONV_TIME, 0.f, parts,
+      wind_data.dye_time,
+      "Time at which WindDye holds (-1: frozen, the particle has not "
+      "recoupled)");
+  list[15] = io_make_output_field(
+      "WindPendingMasses", DOUBLE, 1, UNIT_CONV_MASS, 0.f, parts,
+      wind_data.m_pending,
+      "Wind mass owed by the particle to light particles not yet spawned "
+      "(part of its mass)");
+  list[16] = io_make_output_field(
+      "WindLightMerges", INT, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.light_merges, "Number of merges the particle survived");
+  return 17;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

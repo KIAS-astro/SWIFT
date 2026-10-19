@@ -39,7 +39,7 @@ TESTS = testGreetings testMaths testReading.sh testKernel testKernelLongGrav \
         testAtomic testGravitySpeed testMeshGravityRebuildCheck testNeutrinoCosmology.sh \
         testNeutrinoFermiDirac \
         testLog testDistance testTimeline testPRFM testWind \
-        testPotentialNFWDK  # testMatrixInversion
+        testPotentialNFWDK testLightParticles  # testMatrixInversion
 
 # List of test programs to compile
 check_PROGRAMS = testGreetings testReading testTimeIntegration testKernelLongGrav \
@@ -54,7 +54,7 @@ check_PROGRAMS = testGreetings testReading testTimeIntegration testKernelLongGra
 		 testHashmap testAtomic testHydroMPIrules testGravitySpeed testMeshGravityRebuildCheck \
 		 testNeutrinoCosmology \
 		 testNeutrinoFermiDirac testLog testTimeline testPRFM testWind \
-		 testPotentialNFWDK
+		 testPotentialNFWDK testLightParticles
 
 # Rebuild tests when SWIFT is updated.
 $(check_PROGRAMS): ../src/.libs/libswiftsim.a
@@ -160,6 +160,8 @@ testPRFM_SOURCES = testPRFM.c
 testWind_SOURCES = testWind.c
 
 testPotentialNFWDK_SOURCES = testPotentialNFWDK.c
+
+testLightParticles_SOURCES = testLightParticles.c
 
 testUtilities_SOURCES = testUtilities.c
 

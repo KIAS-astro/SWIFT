@@ -80,6 +80,30 @@ struct wind_props {
 
   /*! Time-step cap while decoupled */
   float dt_max;
+
+  /*! 1: the wind is carried by light gas particles spawned at tree rebuilds
+   * from per-particle reservoirs (Wind:mode light); 0: whole particles */
+  int light;
+
+  /*! Light mode: base gas mass m_g and light mass m_l = m_g / N */
+  double light_m_g, light_m_l;
+
+  /*! Light mode: N = m_g / m_l and its upper bound */
+  double light_N, light_max_mass_ratio;
+
+  /*! Light mode: refinement clock (Bennett et al. 2025, eqs. 6-13): R_200,
+   * t_0, k, f_w,thresh and f_w,ref */
+  double light_R200, light_t0, light_k, light_fw_thresh, light_fw_ref;
+
+  /*! Light mode: forced tree-rebuild interval and the time of the last
+   * light-particle rebuild */
+  double light_rebuild_interval, light_last_rebuild;
+
+  /*! Light mode: optional central source (CC85 test): centre, radius, mass
+   * and energy injection rates (rates 0: no source) and the mass injected
+   * but not yet spawned */
+  double source_centre[3], source_radius, source_Mdot, source_Edot;
+  double source_m_carry;
 };
 
 /**
@@ -89,6 +113,23 @@ struct wind_props {
 struct wind_global_stats {
   double n_launch, m_launch, E_kin_launch, E_th_launch;
   double n_recouple, m_recouple, E_kin_recouple, E_th_recouple;
+
+  /*! Light mode: mass and energy added to reservoirs, mass that left with a
+   * star, light particles spawned (number, mass), mass injected by the
+   * central source, merges (number, mass of the removed partners), relative
+   * kinetic energy turned into heat at merging. Reservoir mass: added =
+   * spawned (minus source) + rounding + to stars + held */
+  double m_pending_added, E_pending_added, m_pending_to_stars;
+
+  /*! Light mode: reservoir mass minus the mass spawned from it, summed over
+   * the draws at the rebuilds (zero in expectation; it stays in the
+   * parents) */
+  double m_rounding;
+  double n_spawn, m_spawn, m_source;
+  double n_merge, m_merge, E_merge_heat;
+
+  /*! Momentum given by all launch kicks, sum of m Delta v (both modes) */
+  double P_launch[3];
 };
 
 extern struct wind_global_stats wind_global_stats;

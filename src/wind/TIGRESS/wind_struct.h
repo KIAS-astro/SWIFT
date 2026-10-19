@@ -62,11 +62,36 @@ struct wind_part_data {
   /*! Recoupling distance of this launch: max(d_rec, factor kernel_gamma h) */
   float d_rec;
 
+  /*! Light mode: wind mass owed by this particle, eta_M mdot_* dt summed
+   * since its last spawn; it stays part of the particle's mass until a
+   * light particle is spawned from it at a tree rebuild */
+  double m_pending;
+
+  /*! Light mode: launch energy owed with m_pending, eta_E u_* mdot_* dt
+   * summed */
+  double E_pending;
+
+  /*! Light mode: refinement dye f_w (Bennett et al. 2025, eqs. 6, 12) at
+   * time dye_time; f_w(t) = dye exp[-(t - dye_time) / t_0]. Set at the
+   * launch and frozen while decoupled, so the decay starts at recoupling;
+   * 0 for gas that never was a light particle */
+  float dye;
+
+  /*! Light mode: time at which dye holds; -1 while decoupled */
+  float dye_time;
+
+  /*! Light mode: number of merges this particle survived */
+  int light_merges;
+
   /*! Number of launches of this particle */
   int launch_count;
 
   /*! 1 while the particle is decoupled from the hydrodynamics */
   char decoupled;
+
+  /*! 1 for a light wind particle until it has been merged back to at least
+   * half the base gas mass */
+  char light;
 };
 
 #endif /* SWIFT_WIND_TIGRESS_STRUCT_H */

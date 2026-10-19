@@ -510,9 +510,15 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
           /* Add the SFR and SFR*dt to the SFH struct of this cell */
           star_formation_logger_log_active_part(p, xp, &c->stars.sfh, dt_star);
 
+          /* Light wind: this step's wind mass goes to the reservoir */
+          wind_light_accumulate(p, xp, e->wind_props, dt_star);
+
           /* Are we forming a star particle from this SF rate? */
           if (star_formation_should_convert_to_star(p, xp, sf_props, e,
                                                     dt_star)) {
+
+            /* A pending light-wind reservoir leaves with the star */
+            wind_part_becomes_star(p);
 
             /* Convert the gas particle to a star particle */
             const int n_spart_spawn =

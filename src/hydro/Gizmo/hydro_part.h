@@ -31,6 +31,7 @@
 #include "star_formation_struct.h"
 #include "timestep_limiter_struct.h"
 #include "tracers_struct.h"
+#include "wind_struct.h"
 
 /* Extra particle data not needed during the computation. */
 struct xpart {

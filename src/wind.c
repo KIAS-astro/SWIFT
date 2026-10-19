@@ -33,6 +33,7 @@
 #include "adiabatic_index.h"
 #include "engine.h"
 #include "error.h"
+#include "hydro.h"
 #include "parser.h"
 #include "physical_constants.h"
 #include "restart.h"
@@ -44,6 +45,7 @@
 #include <mpi.h>
 #endif
 
+#include <float.h>
 #include <math.h>
 #include <string.h>
 
@@ -140,6 +142,74 @@ void wind_props_init(struct wind_props *props,
   props->dt_max =
       parser_get_opt_param_double(params, "Wind:max_timestep_Myr", 1.) * Myr;
 
+  /* Wind:mode: particle (whole gas particles launched by the star formation
+   * draw) or light (light particles spawned at rebuilds from reservoirs) */
+  char mode[32];
+  parser_get_opt_param_string(params, "Wind:mode", mode, "particle");
+  if (strcmp(mode, "particle") == 0)
+    props->light = 0;
+  else if (strcmp(mode, "light") == 0)
+    props->light = 1;
+  else
+    error("Wind:mode must be particle or light, got '%s'", mode);
+
+  props->light_m_g = 0.;
+  props->light_m_l = 0.;
+  props->light_N = 1.;
+  props->light_max_mass_ratio = parser_get_opt_param_double(
+      params, "Wind:light_max_mass_ratio", 10.);
+  props->light_R200 =
+      parser_get_opt_param_double(params, "Wind:light_R200_kpc", 97.9) * kpc;
+  props->light_t0 =
+      parser_get_opt_param_double(params, "Wind:light_t0_Myr", 10.) * Myr;
+  props->light_k = parser_get_opt_param_double(params, "Wind:light_k", 0.25);
+  props->light_fw_thresh =
+      parser_get_opt_param_double(params, "Wind:light_fw_thresh", 1000.);
+  props->light_fw_ref =
+      parser_get_opt_param_double(params, "Wind:light_fw_ref", 0.1);
+  props->light_rebuild_interval =
+      parser_get_opt_param_double(params, "Wind:light_rebuild_interval_Myr",
+                                  1.) *
+      Myr;
+  props->light_last_rebuild = -FLT_MAX;
+  props->source_radius = 0.;
+  props->source_Mdot = 0.;
+  props->source_Edot = 0.;
+  props->source_m_carry = 0.;
+  for (int k = 0; k < 3; k++) props->source_centre[k] = 0.;
+
+  if (props->light) {
+    props->light_m_g =
+        parser_get_param_double(params, "Wind:light_gas_mass_Msun") *
+        phys_const->const_solar_mass;
+    props->light_N = parser_get_param_double(params, "Wind:light_N");
+    if (props->light_N < 1.) error("Wind:light_N must be at least 1");
+    if (props->light_N > props->light_max_mass_ratio)
+      error(
+          "Wind:light_N = %g exceeds Wind:light_max_mass_ratio = %g: SPH and "
+          "MFM errors grow with the mass ratio of neighbours",
+          props->light_N, props->light_max_mass_ratio);
+    props->light_m_l = props->light_m_g / props->light_N;
+
+    /* Optional central source (Chevalier & Clegg 1985 test) */
+    props->source_Mdot =
+        parser_get_opt_param_double(params, "Wind:light_source_Mdot_Msun_p_yr",
+                                    0.) *
+        phys_const->const_solar_mass / phys_const->const_year;
+    props->source_Edot =
+        parser_get_opt_param_double(params, "Wind:light_source_Edot_erg_p_s",
+                                    0.) /
+        energy_cgs * units_cgs_conversion_factor(us, UNIT_CONV_TIME);
+    props->source_radius =
+        parser_get_opt_param_double(params, "Wind:light_source_radius_kpc",
+                                    0.) *
+        kpc;
+    parser_get_opt_param_double_array(params, "Wind:light_source_centre", 3,
+                                      props->source_centre);
+    if (props->source_Mdot > 0. && props->source_Edot <= 0.)
+      error("Wind:light_source_Edot_erg_p_s must be positive with a source");
+  }
+
   bzero(&wind_global_stats, sizeof(struct wind_global_stats));
 }
 
@@ -168,6 +238,25 @@ void wind_props_print(const struct wind_props *props) {
       "Wind: recoupling at d = max(%.4g, %.3g kernel supports at launch) or "
       "t = %.4g (internal units); time-step cap %.4g",
       props->d_rec, props->d_rec_kernel_factor, props->t_rec, props->dt_max);
+  if (props->light) {
+    message(
+        "Wind: light particles, m_g = %.6g, N = %g, m_l = %.6g (internal "
+        "units), mass ratio cap %g, rebuild every %.4g",
+        props->light_m_g, props->light_N, props->light_m_l,
+        props->light_max_mass_ratio, props->light_rebuild_interval);
+    message(
+        "Wind: light clock R_200 = %.4g, t_0 = %.4g, k = %g, f_w,thresh = %g, "
+        "f_w,ref = %g",
+        props->light_R200, props->light_t0, props->light_k,
+        props->light_fw_thresh, props->light_fw_ref);
+    if (props->source_Mdot > 0.)
+      message(
+          "Wind: light source at (%.4g, %.4g, %.4g), radius %.4g, Mdot = "
+          "%.6g, Edot = %.6g (internal units)",
+          props->source_centre[0], props->source_centre[1],
+          props->source_centre[2], props->source_radius, props->source_Mdot,
+          props->source_Edot);
+  }
 }
 
 /**
@@ -213,6 +302,48 @@ void wind_print_stats(const struct engine *e) {
         "E_kin+E_th=%.6e E_kin+gamma*E_th=%.6e (internal units)",
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[2] + s[3],
         s[2] + hydro_gamma * s[3]);
+
+  if (!e->wind_props->light) return;
+
+  /* Light mode: reservoirs still held, and the light population */
+  double held[4] = {0., 0., 0., 0.};
+  const struct space *sp = e->s;
+  for (size_t i = 0; i < sp->nr_parts; i++) {
+    const struct part *p = &sp->parts[i];
+    if (p->time_bin == time_bin_inhibited ||
+        p->time_bin == time_bin_not_created)
+      continue;
+    held[0] += p->wind_data.m_pending;
+    if (p->wind_data.light) {
+      held[1] += 1.;
+      held[2] += hydro_get_mass(p);
+      if (p->wind_data.decoupled) held[3] += 1.;
+    }
+  }
+  const struct wind_global_stats *g = &wind_global_stats;
+  double l[17] = {g->m_pending_added, g->E_pending_added,
+                  g->m_pending_to_stars, g->m_rounding,
+                  g->n_spawn,         g->m_spawn,
+                  g->m_source,        g->n_merge,
+                  g->m_merge,         g->E_merge_heat,
+                  held[0],            held[1],
+                  held[2],            held[3],
+                  g->P_launch[0],     g->P_launch[1],
+                  g->P_launch[2]};
+#ifdef WITH_MPI
+  double lr[17];
+  MPI_Reduce(l, lr, 17, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  memcpy(l, lr, sizeof(l));
+#endif
+  if (e->nodeID == 0)
+    message(
+        "Light totals at t=%.6e: pending added M=%.10e E=%.10e; to stars "
+        "M=%.10e; rounding M=%.10e; spawned N=%.0f M=%.10e; source M=%.10e; "
+        "merged N=%.0f M=%.10e E_heat=%.10e; pending held M=%.10e; light "
+        "alive N=%.0f M=%.10e decoupled N=%.0f; launch kicks Px=%.10e "
+        "Py=%.10e Pz=%.10e (internal units)",
+        e->time, l[0], l[1], l[2], l[3], l[4], l[5], l[6], l[7], l[8], l[9],
+        l[10], l[11], l[12], l[13], l[14], l[15], l[16]);
 }
 
 #endif /* WIND_TIGRESS */

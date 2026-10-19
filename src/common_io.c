@@ -1888,6 +1888,7 @@ void io_select_star_fields(const struct spart *const sparts,
   *num_fields +=
       tracers_write_sparticles(sparts, list + *num_fields, with_cosmology);
   *num_fields += star_formation_write_sparticles(sparts, list + *num_fields);
+  *num_fields += wind_write_sparticles(sparts, list + *num_fields);
   if (with_fof) {
     *num_fields += fof_write_sparts(sparts, list + *num_fields);
   }

@@ -250,6 +250,7 @@ __attribute__((always_inline)) INLINE static void drift_spart(
 
   /* Predict the values of the extra fields */
   stars_predict_extra(sp, dt_drift);
+  wind_carrier_drift(sp, dt_drift, e->wind_props, e->time);
 
   /* Compute offsets since last cell construction */
   for (int k = 0; k < 3; k++) {

@@ -52,4 +52,8 @@ INLINE static void wind_struct_restore(struct wind_props *props,
 
 INLINE static void wind_print_stats(const struct engine *e) {}
 
+INLINE static int wind_uses_carriers(const struct wind_props *props) {
+  return 0;
+}
+
 #endif /* SWIFT_WIND_NONE_PROPERTIES_H */

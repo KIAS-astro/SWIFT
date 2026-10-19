@@ -31,7 +31,9 @@
 
 struct part;
 struct xpart;
+struct spart;
 struct cosmology;
+struct hydro_props;
 struct wind_props;
 
 /**
@@ -88,6 +90,60 @@ __attribute__((always_inline)) INLINE static void wind_drift_part(
 
 INLINE static float wind_timestep(const struct wind_props *props) {
   return FLT_MAX;
+}
+
+/* Wind carriers: none */
+
+__attribute__((always_inline)) INLINE static int spart_is_wind_carrier(
+    const struct spart *sp) {
+  return 0;
+}
+
+__attribute__((always_inline)) INLINE static int wind_feedback_is_active(
+    const struct spart *sp) {
+  return 1;
+}
+
+INLINE static void wind_first_init_spart(struct spart *sp,
+                                         const struct wind_props *props,
+                                         const double time) {}
+
+INLINE static int wind_number_of_carriers(const struct part *p,
+                                          const struct xpart *xp,
+                                          const struct wind_props *props,
+                                          const integertime_t ti_current,
+                                          const double dt_star, double *m_c,
+                                          int *whole) {
+  *m_c = 0.;
+  *whole = 0;
+  return 0;
+}
+
+INLINE static void wind_carrier_launch(
+    struct spart *sp, struct part *p, struct xpart *xp,
+    const struct wind_props *props, const struct cosmology *cosmo,
+    double m_c, const int whole, const double time,
+    const integertime_t ti_current, const int index) {}
+
+INLINE static void wind_carrier_launch_failed(void) {}
+
+__attribute__((always_inline)) INLINE static void wind_carrier_drift(
+    struct spart *sp, const double dt_drift, const struct wind_props *props,
+    const double time) {}
+
+__attribute__((always_inline)) INLINE static void wind_carrier_init_spart(
+    struct spart *sp) {}
+
+__attribute__((always_inline)) INLINE static void wind_carrier_iact_density(
+    const float r2, const float hi, struct spart *si) {}
+
+INLINE static void wind_carrier_iact_apply(
+    const float r2, const float dx[3], const float hi, const struct spart *si,
+    struct part *pj, struct xpart *xpj, const struct cosmology *cosmo,
+    const struct hydro_props *hydro_props) {}
+
+INLINE static int wind_carrier_end_step(struct spart *sp, const double time) {
+  return 0;
 }
 
 #endif /* SWIFT_WIND_NONE_H */

@@ -32,6 +32,7 @@
 /* Local includes. */
 #include "engine.h"
 #include "error.h"
+#include "lock.h"
 #include "parser.h"
 #include "physical_constants.h"
 #include "restart.h"
@@ -48,6 +49,39 @@
 
 /*! Launch and recoupling totals on this rank */
 struct wind_global_stats wind_global_stats;
+
+/*! 1 when the run uses wind carriers */
+int wind_carriers_on = 0;
+
+/*! One line per carrier deposit (wind_carriers.txt, or
+ * wind_carriers_<rank>.txt with MPI) */
+static FILE *wind_carrier_file = NULL;
+static swift_lock_type wind_carrier_file_lock;
+
+/**
+ * @brief Append one line to the carrier event file, opening it on first use.
+ */
+void wind_carrier_log_event(const char *line) {
+  lock_lock(&wind_carrier_file_lock);
+  if (wind_carrier_file == NULL) {
+    char name[64] = "wind_carriers.txt";
+#ifdef WITH_MPI
+    int rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    sprintf(name, "wind_carriers_%d.txt", rank);
+#endif
+    wind_carrier_file = fopen(name, "a");
+    if (wind_carrier_file == NULL) error("Could not open %s", name);
+    fprintf(wind_carrier_file,
+            "# id t_launch t_deposit criterion(1=distance,2=time) "
+            "x_launch[3] x_deposit[3] distance d_rec mass v[3] u h n_ngb "
+            "weight_sum (internal units)\n");
+  }
+  fputs(line, wind_carrier_file);
+  fflush(wind_carrier_file);
+  if (lock_unlock(&wind_carrier_file_lock) != 0)
+    error("Failed to unlock the wind carrier file.");
+}
 
 /**
  * @brief Read the Wind section of the parameter file.
@@ -116,6 +150,28 @@ void wind_props_init(struct wind_props *props,
   props->dt_max =
       parser_get_opt_param_double(params, "Wind:max_timestep_Myr", 1.) * Myr;
 
+  char mode[32] = "particle";
+  parser_get_opt_param_string(params, "Wind:mode", mode, "particle");
+  if (strcmp(mode, "particle") == 0)
+    props->carriers = 0;
+  else if (strcmp(mode, "carrier") == 0)
+    props->carriers = 1;
+  else
+    error("Wind:mode must be particle or carrier, got '%s'", mode);
+  props->carriers_per_particle =
+      parser_get_opt_param_double(params, "Wind:carriers_per_particle", 1.);
+  if (props->carriers_per_particle < 1.)
+    error("Wind:carriers_per_particle must be >= 1");
+
+#if !defined(FEEDBACK_NONE)
+  if (props->carriers)
+    error(
+        "Wind:mode = carrier needs --with-feedback=none (the carriers use its "
+        "loops)");
+#endif
+
+  wind_carriers_on = props->carriers;
+  lock_init(&wind_carrier_file_lock);
   bzero(&wind_global_stats, sizeof(struct wind_global_stats));
 }
 
@@ -142,6 +198,13 @@ void wind_props_print(const struct wind_props *props) {
       "Wind: recoupling at d = max(%.4g, %.3g kernel supports at launch) or "
       "t = %.4g (internal units); time-step cap %.4g",
       props->d_rec, props->d_rec_kernel_factor, props->t_rec, props->dt_max);
+  if (props->carriers)
+    message(
+        "Wind: carried by wind carriers, N_c = %.4g carriers per gas particle "
+        "mass",
+        props->carriers_per_particle);
+  else
+    message("Wind: carried by whole gas particles");
 }
 
 /**
@@ -164,6 +227,8 @@ void wind_struct_restore(struct wind_props *props, FILE *stream) {
   restart_read_blocks((void *)&wind_global_stats,
                       sizeof(struct wind_global_stats), 1, stream, NULL,
                       "wind counters");
+  wind_carriers_on = props->carriers;
+  lock_init(&wind_carrier_file_lock);
 }
 
 /**
@@ -185,6 +250,32 @@ void wind_print_stats(const struct engine *e) {
         "Wind totals at t=%.6e: launched N=%.0f M=%.6e E_kin=%.6e E_th=%.6e; "
         "recoupled N=%.0f M=%.6e E_kin=%.6e E_th=%.6e (internal units)",
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+
+  if (!e->wind_props->carriers) return;
+  const struct wind_global_stats *g = &wind_global_stats;
+  double c[22] = {g->c_n_launch,      g->c_m_launch,      g->c_p_launch[0],
+                  g->c_p_launch[1],   g->c_p_launch[2],   g->c_E_kin_launch,
+                  g->c_E_th_launch,   g->c_E_launch_net,  g->c_Z_launch,
+                  g->c_n_failed,      g->c_n_deposit,     g->c_n_by_time,
+                  g->c_m_deposit,     g->c_p_deposit[0],  g->c_p_deposit[1],
+                  g->c_p_deposit[2],  g->c_E_kin_deposit, g->c_E_th_deposit,
+                  g->c_E_pot_deposit, g->c_E_floor,       g->c_Z_deposit,
+                  g->c_n_retry};
+#ifdef WITH_MPI
+  double cr[22];
+  MPI_Reduce(c, cr, 22, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  memcpy(c, cr, sizeof(c));
+#endif
+  if (e->nodeID == 0)
+    message(
+        "Wind carrier totals at t=%.6e: launched N=%.0f M=%.6e "
+        "P=(%.6e,%.6e,%.6e) E_kin=%.6e E_th=%.6e E_net=%.6e M_Z=%.6e "
+        "failed=%.0f; deposited N=%.0f by_time=%.0f M=%.6e "
+        "P=(%.6e,%.6e,%.6e) E_kin=%.6e E_th=%.6e E_pot=%.6e E_floor=%.6e "
+        "M_Z=%.6e retries=%.0f (internal units)",
+        e->time, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9],
+        c[10], c[11], c[12], c[13], c[14], c[15], c[16], c[17], c[18], c[19],
+        c[20], c[21]);
 }
 
 #endif /* WIND_TIGRESS */

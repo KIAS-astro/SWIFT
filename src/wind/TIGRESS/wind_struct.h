@@ -69,4 +69,53 @@ struct wind_part_data {
   char decoupled;
 };
 
+/**
+ * @brief Why a wind carrier deposits.
+ */
+enum wind_carrier_criterion {
+  wind_carrier_flying = 0,   /*<! not yet */
+  wind_carrier_distance = 1, /*<! travelled d_rec */
+  wind_carrier_time = 2      /*<! age reached t_rec */
+};
+
+/**
+ * @brief Wind-carrier data carried by a star particle (wind-carrier-design.md).
+ *
+ * A carrier is a star particle that moves wind material from star-forming
+ * gas to the place where it recouples. Energies per unit mass, physical.
+ */
+struct wind_spart_data {
+
+  /*! Displacement since the launch, accumulated in the drift */
+  double dx[3];
+
+  /*! Position at the launch */
+  double launch_x[3];
+
+  /*! Time of the launch */
+  double launch_time;
+
+  /*! Internal energy per unit mass carried */
+  float u;
+
+  /*! Recoupling distance: max(d_rec, factor x kernel support at launch) */
+  float d_rec;
+
+  /*! Gravitational acceleration at the last time-step, for the potential
+   * energy of the deposited mass */
+  float a_grav[3];
+
+  /*! Sum of the kernel weights of the gas neighbours at the deposit */
+  float weight_sum;
+
+  /*! Number of gas neighbours at the deposit */
+  int ngb_count;
+
+  /*! 1 for a carrier, 0 for an ordinary star particle */
+  char carrier;
+
+  /*! Why the carrier deposits (#wind_carrier_criterion), 0 while flying */
+  char deposit;
+};
+
 #endif /* SWIFT_WIND_TIGRESS_STRUCT_H */

@@ -510,6 +510,41 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
           /* Add the SFR and SFR*dt to the SFH struct of this cell */
           star_formation_logger_log_active_part(p, xp, &c->stars.sfh, dt_star);
 
+          /* Launch wind carriers, drawn independently of the star */
+          double m_carrier;
+          int whole;
+          const int n_carrier =
+              wind_number_of_carriers(p, xp, e->wind_props, ti_current,
+                                      dt_star, &m_carrier, &whole);
+          int converted = 0;
+          for (int i = 0; i < n_carrier; i++) {
+            const int convert = whole && (i == n_carrier - 1);
+            struct spart *sp =
+                convert ? cell_convert_part_to_spart(e, c, p, xp)
+                        : cell_spawn_new_spart_from_part(e, c, p, xp);
+            if (sp == NULL) {
+              wind_carrier_launch_failed();
+              break;
+            }
+            wind_carrier_launch(sp, p, xp, e->wind_props, cosmo, m_carrier,
+                                convert, e->time, ti_current, i);
+            c->stars.h_max = max(c->stars.h_max, sp->h);
+            c->stars.h_max_active = max(c->stars.h_max_active, sp->h);
+            const float dx_part = sqrtf(sp->x_diff[0] * sp->x_diff[0] +
+                                        sp->x_diff[1] * sp->x_diff[1] +
+                                        sp->x_diff[2] * sp->x_diff[2]);
+            const float dx_sort =
+                sqrtf(sp->x_diff_sort[0] * sp->x_diff_sort[0] +
+                      sp->x_diff_sort[1] * sp->x_diff_sort[1] +
+                      sp->x_diff_sort[2] * sp->x_diff_sort[2]);
+            c->stars.dx_max_part = max(c->stars.dx_max_part, dx_part);
+            c->stars.dx_max_sort = max(c->stars.dx_max_sort, dx_sort);
+            if (convert) converted = 1;
+          }
+
+          /* The whole particle became a carrier */
+          if (converted) continue;
+
           /* Are we forming a star particle from this SF rate? */
           if (star_formation_should_convert_to_star(p, xp, sf_props, e,
                                                     dt_star)) {

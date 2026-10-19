@@ -74,6 +74,7 @@ enum random_number_type {
   random_number_mosaic_poisson = 384160001LL,
   random_number_powerspectrum_split = 126247697LL,
   random_number_wind_direction = 7337016997LL,
+  random_number_wind_carrier = 2860486313LL,
 };
 
 #ifndef __APPLE__

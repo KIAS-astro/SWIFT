@@ -36,4 +36,14 @@ INLINE static int wind_write_particles(const struct part *parts,
   return 0;
 }
 
+INLINE static int wind_read_sparticles(struct spart *sparts,
+                                       struct io_props *list) {
+  return 0;
+}
+
+INLINE static int wind_write_sparticles(const struct spart *sparts,
+                                        struct io_props *list) {
+  return 0;
+}
+
 #endif /* SWIFT_WIND_NONE_IO_H */

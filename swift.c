@@ -1193,7 +1193,9 @@ int main(int argc, char *argv[]) {
     /* Initialise the feedback properties */
     if (with_feedback) {
 #ifdef FEEDBACK_NONE
-      if (!with_rt) /* allow swift to run without feedback model if RT is on. */
+      /* allow swift to run without feedback model if RT is on, or with wind
+       * carriers, which deposit through the feedback loops. */
+      if (!with_rt && !wind_uses_carriers(&wind_properties))
         error("ERROR: Running with feedback but compiled without it.");
 #endif
       feedback_props_init(&feedback_properties, &prog_const, &us, params,

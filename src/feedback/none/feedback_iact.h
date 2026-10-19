@@ -45,7 +45,9 @@ runner_iact_nonsym_feedback_density(const float r2, const float dx[3],
                                     const struct xpart *xp,
                                     const struct cosmology *cosmo,
                                     const struct feedback_props *fb_props,
-                                    const integertime_t ti_current) {}
+                                    const integertime_t ti_current) {
+  wind_carrier_iact_density(r2, hi, si);
+}
 
 /**
  * @brief Feedback interaction between two particles (non-symmetric).
@@ -70,6 +72,8 @@ runner_iact_nonsym_feedback_apply(
     const float r2, const float dx[3], const float hi, const float hj,
     const struct spart *si, struct part *pj, struct xpart *xp,
     const struct cosmology *cosmo, const struct hydro_props *hydro_props,
-    const struct feedback_props *fb_props, const integertime_t ti_current) {}
+    const struct feedback_props *fb_props, const integertime_t ti_current) {
+  wind_carrier_iact_apply(r2, dx, hi, si, pj, xp, cosmo, hydro_props);
+}
 
 #endif /* SWIFT_NONE_FEEDBACK_IACT_H */

@@ -20,8 +20,13 @@
 #define SWIFT_PRFM_STAR_FORMATION_STRUCT_H
 
 /* Do we need unique IDs (only useful when spawning
-   new particles, conversion gas->stars does not need unique IDs) */
+   new particles, conversion gas->stars does not need unique IDs)? With the
+   TIGRESS wind, wind carriers are spawned from gas particles. */
+#ifdef WIND_TIGRESS
+#define star_formation_need_unique_id 1
+#else
 #define star_formation_need_unique_id 0
+#endif
 
 /**
  * @brief Star-formation-related properties stored in the extended particle

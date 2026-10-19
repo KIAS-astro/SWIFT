@@ -75,18 +75,48 @@ struct wind_props {
 
   /*! Time-step cap while decoupled */
   float dt_max;
+
+  /*! 1: the wind is carried by wind carriers (star particles of mass
+   * m_g / N_c), 0: by whole gas particles */
+  int carriers;
+
+  /*! Number of carriers per gas particle mass, N_c */
+  double carriers_per_particle;
 };
 
 /**
  * @brief Running totals of the launches and recouplings on this rank.
  * Energies in internal units, kinetic and thermal separately.
+ *
+ * Carriers (prefix c_): E_launch_net is the energy added at launch (the
+ * carrier's kinetic and internal energy minus those the gas lost with the
+ * carrier's mass); at the deposit E_pot_deposit is the potential energy
+ * gained by the deposited mass (taken from the thermal energy), E_floor the
+ * energy added by the internal-energy floor, Z the metal masses.
  */
 struct wind_global_stats {
   double n_launch, m_launch, E_kin_launch, E_th_launch;
   double n_recouple, m_recouple, E_kin_recouple, E_th_recouple;
+  double c_n_launch, c_m_launch, c_p_launch[3], c_E_kin_launch,
+      c_E_th_launch, c_E_launch_net, c_Z_launch, c_n_failed;
+  double c_n_deposit, c_n_by_time, c_m_deposit, c_p_deposit[3],
+      c_E_kin_deposit, c_E_th_deposit, c_E_pot_deposit, c_E_floor,
+      c_Z_deposit, c_n_retry;
 };
 
 extern struct wind_global_stats wind_global_stats;
+
+/*! 1 when the run uses wind carriers (Wind:mode = carrier) */
+extern int wind_carriers_on;
+
+/**
+ * @brief Does the run carry the wind with wind carriers?
+ */
+INLINE static int wind_uses_carriers(const struct wind_props *props) {
+  return props->carriers;
+}
+
+void wind_carrier_log_event(const char *line);
 
 void wind_props_init(struct wind_props *props,
                      const struct phys_const *phys_const,

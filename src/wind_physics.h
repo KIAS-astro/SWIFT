@@ -142,4 +142,73 @@ static inline enum wind_draw_outcome wind_draw(const double u,
   return wind_draw_nothing;
 }
 
+/**
+ * @brief Number of wind carriers launched in a step: floor(p_c), plus one
+ * with probability p_c - floor(p_c). The expectation is p_c.
+ *
+ * @param p_c Expected number, eta_M mdot_* dt / m_c.
+ * @param u Uniform number in [0, 1).
+ */
+static inline int wind_carrier_count(const double p_c, const double u) {
+  const double n = floor(p_c);
+  return (int)n + (u < p_c - n ? 1 : 0);
+}
+
+/**
+ * @brief Kernel share of one gas neighbour in a carrier's deposit.
+ *
+ * @param w The neighbour's kernel value W(r_j, h_c).
+ * @param w_sum The sum of W over all neighbours.
+ */
+static inline double wind_carrier_share(const double w, const double w_sum) {
+  return w / w_sum;
+}
+
+/**
+ * @brief Mass fraction (of a metal) after adding dm at fraction f_c to m at
+ * fraction f; conserves the metal mass m f + dm f_c.
+ */
+static inline double wind_carrier_mix(const double m, const double f,
+                                      const double dm, const double f_c) {
+  return (m * f + dm * f_c) / (m + dm);
+}
+
+/**
+ * @brief Deposit a mass dm of a carrier into one gas particle.
+ *
+ * Mass and momentum add; the thermal energy is what makes the total
+ * (kinetic + thermal + potential) energy of the pair the same before and
+ * after:
+ *   E_th' = m u + dm (v_c^2 / 2 + u_c) + m v^2 / 2 - (m + dm) v'^2 / 2
+ *           - dm a_c . (x_c - x),
+ * where the last term is the potential energy gained by moving dm from the
+ * carrier to the gas particle (exact in a uniform field a_c).
+ *
+ * @param m Gas mass.
+ * @param v Gas velocity.
+ * @param u Gas internal energy per mass.
+ * @param dm Deposited mass.
+ * @param v_c Carrier velocity.
+ * @param u_c Carrier internal energy per mass.
+ * @param a_dx a_c . (x_c - x).
+ * @param v_new (return) The gas velocity after the deposit.
+ * @return The gas thermal energy (not per mass) after the deposit.
+ */
+static inline double wind_carrier_deposit(const double m, const double v[3],
+                                          const double u, const double dm,
+                                          const double v_c[3],
+                                          const double u_c, const double a_dx,
+                                          double v_new[3]) {
+  const double m_new = m + dm;
+  double v2 = 0., v2_new = 0., v2_c = 0.;
+  for (int k = 0; k < 3; k++) {
+    v_new[k] = (m * v[k] + dm * v_c[k]) / m_new;
+    v2 += v[k] * v[k];
+    v2_new += v_new[k] * v_new[k];
+    v2_c += v_c[k] * v_c[k];
+  }
+  return m * u + dm * (0.5 * v2_c + u_c) + 0.5 * m * v2 -
+         0.5 * m_new * v2_new - dm * a_dx;
+}
+
 #endif /* SWIFT_WIND_PHYSICS_H */

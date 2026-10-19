@@ -329,6 +329,9 @@ void space_first_init_sparts_mapper(void *restrict map_data, int count,
     /* And radiative transfer data */
     rt_first_init_spart(&sp[k]);
 
+    /* And the wind-carrier data */
+    wind_first_init_spart(&sp[k], e->wind_props, e->time);
+
 #ifdef SWIFT_DEBUG_CHECKS
     if (sp[k].gpart && sp[k].gpart->id_or_neg_offset != -(k + delta))
       error("Invalid gpart -> spart link");

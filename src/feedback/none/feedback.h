@@ -25,6 +25,7 @@
 #include "hydro_properties.h"
 #include "part.h"
 #include "units.h"
+#include "wind.h"
 
 /**
  * @brief Computes the time-step length of a given star particle from feedback
@@ -82,7 +83,9 @@ __attribute__((always_inline)) INLINE static void feedback_reset_part(
  * @param sp The particle to act upon
  */
 __attribute__((always_inline)) INLINE static void feedback_init_spart(
-    struct spart *sp) {}
+    struct spart *sp) {
+  wind_carrier_init_spart(sp);
+}
 
 /**
  * @brief Should we do feedback for this star?
@@ -100,7 +103,9 @@ __attribute__((always_inline)) INLINE static int feedback_do_feedback(
  *
  * Note: Since this 'none' feedback mode is used for testing the neighbour
  * loops only, we want to always do feedback irrespective of the particle
- * or of the system's state.
+ * or of the system's state. The exception is a run with wind carriers,
+ * which use these loops to deposit the wind (src/wind/TIGRESS/wind.h): there
+ * only a depositing carrier is active.
  *
  * @param sp The #spart.
  * @param e The #engine.
@@ -108,7 +113,7 @@ __attribute__((always_inline)) INLINE static int feedback_do_feedback(
 __attribute__((always_inline)) INLINE static int feedback_is_active(
     const struct spart *sp, const struct engine *e) {
 
-  return 1;
+  return wind_feedback_is_active(sp);
 }
 
 /**

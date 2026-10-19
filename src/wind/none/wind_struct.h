@@ -28,4 +28,9 @@
  */
 struct wind_part_data {};
 
+/**
+ * @brief Wind-carrier data carried by a star particle: none.
+ */
+struct wind_spart_data {};
+
 #endif /* SWIFT_WIND_NONE_STRUCT_H */

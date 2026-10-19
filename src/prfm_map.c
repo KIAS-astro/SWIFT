@@ -213,7 +213,7 @@ void prfm_map_build(struct engine *e, const struct prfm_map_params *mp) {
   for (size_t k = 0; k < s->nr_sparts; k++) {
     const struct spart *sp = &s->sparts[k];
     if (sp->time_bin == time_bin_inhibited ||
-        sp->time_bin == time_bin_not_created)
+        sp->time_bin == time_bin_not_created || spart_is_wind_carrier(sp))
       continue;
     const double dz = prfm_map_wrap(sp->x[2] - c[2], s->dim[2], s->periodic);
     if (fabs(dz) >= mp->half_height) continue;

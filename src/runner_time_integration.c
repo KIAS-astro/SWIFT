@@ -923,6 +923,13 @@ void runner_do_timestep(struct runner *r, struct cell *c, const int timer) {
         if (ti_end != ti_current)
           error("Computing time-step of rogue particle.");
 #endif
+        /* A wind carrier that has deposited (its feedback loops are done,
+         * the time-step task depends on stars_out) leaves the run */
+        if (wind_carrier_end_step(sp, e->time)) {
+          cell_remove_spart(e, c, sp);
+          continue;
+        }
+
         /* Bin before the overwrite below; feedback_will_do_feedback() needs
            it to reconstruct the just-finished step's age. */
         const timebin_t old_time_bin = sp->time_bin;

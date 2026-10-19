@@ -3257,6 +3257,12 @@ case "$with_wind" in
       if test "$with_hydro" != "sphenix"; then
          AC_MSG_ERROR([--with-wind=TIGRESS needs --with-hydro=sphenix])
       fi
+      if test "$with_stars" != "EAGLE"; then
+         AC_MSG_ERROR([--with-wind=TIGRESS needs --with-stars=EAGLE (wind carriers are EAGLE star particles)])
+      fi
+      if test "$with_chemistry" != "EAGLE"; then
+         AC_MSG_ERROR([--with-wind=TIGRESS needs --with-chemistry=EAGLE (wind carriers carry its metals)])
+      fi
       AC_DEFINE([WIND_TIGRESS], [1], [Decoupled wind with TIGRESS loadings (Kim et al. 2020)])
    ;;
    *)

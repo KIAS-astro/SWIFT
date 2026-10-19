@@ -100,4 +100,56 @@ INLINE static int wind_write_particles(const struct part *parts,
   return 12;
 }
 
+/**
+ * @brief Read the optional carrier fields of star particles: WindCarrier
+ * (int8; 1 makes the particle a carrier launched at the start time) and
+ * WindCarrierInternalEnergies.
+ *
+ * @return The number of fields to read.
+ */
+INLINE static int wind_read_sparticles(struct spart *sparts,
+                                       struct io_props *list) {
+  list[0] = io_make_input_field("WindCarrier", CHAR, 1, OPTIONAL,
+                                UNIT_CONV_NO_UNITS, sparts, wind_data.carrier);
+  list[1] = io_make_input_field("WindCarrierInternalEnergies", FLOAT, 1,
+                                OPTIONAL, UNIT_CONV_ENERGY_PER_UNIT_MASS,
+                                sparts, wind_data.u);
+  return 2;
+}
+
+/**
+ * @brief The carrier fields written to snapshots for star particles.
+ *
+ * @return The number of fields to write.
+ */
+INLINE static int wind_write_sparticles(const struct spart *sparts,
+                                        struct io_props *list) {
+  list[0] = io_make_output_field("WindCarrier", CHAR, 1, UNIT_CONV_NO_UNITS,
+                                 0.f, sparts, wind_data.carrier,
+                                 "1 for a wind carrier (not a star), 0 "
+                                 "otherwise");
+  list[1] = io_make_output_field(
+      "WindCarrierLaunchTimes", DOUBLE, 1, UNIT_CONV_TIME, 0.f, sparts,
+      wind_data.launch_time, "Time of the carrier's launch (carriers only)");
+  list[2] = io_make_output_field("WindCarrierLaunchPositions", DOUBLE, 3,
+                                 UNIT_CONV_LENGTH, 1.f, sparts,
+                                 wind_data.launch_x,
+                                 "Position at the launch (carriers only)");
+  list[3] = io_make_output_field(
+      "WindCarrierDisplacements", DOUBLE, 3, UNIT_CONV_LENGTH, 1.f, sparts,
+      wind_data.dx,
+      "Displacement since the launch, accumulated in the drift (carriers "
+      "only)");
+  list[4] = io_make_output_field(
+      "WindCarrierInternalEnergies", FLOAT, 1, UNIT_CONV_ENERGY_PER_UNIT_MASS,
+      0.f, sparts, wind_data.u,
+      "Internal energy per unit mass carried (carriers only)");
+  list[5] = io_make_output_field(
+      "WindCarrierRecouplingDistanceThresholds", FLOAT, 1, UNIT_CONV_LENGTH,
+      1.f, sparts, wind_data.d_rec,
+      "Recoupling distance, max(d_rec, factor x kernel support at launch) "
+      "(carriers only)");
+  return 6;
+}
+
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

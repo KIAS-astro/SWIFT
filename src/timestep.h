@@ -318,11 +318,15 @@ __attribute__((always_inline)) INLINE static integertime_t get_part_rt_timestep(
 __attribute__((always_inline)) INLINE static integertime_t get_spart_timestep(
     const struct spart *restrict sp, const struct engine *restrict e) {
 
-  /* Stellar time-step */
-  float new_dt_stars = stars_compute_timestep(
-      sp, e->stars_properties, e->feedback_props, e->physical_constants,
-      e->internal_units, (e->policy & engine_policy_cosmology), e->cosmology,
-      e->ti_current, e->time, e->time_base);
+  /* Stellar time-step (a wind carrier: the wind cap, it does not evolve) */
+  float new_dt_stars =
+      spart_is_wind_carrier(sp)
+          ? wind_timestep(e->wind_props)
+          : stars_compute_timestep(
+                sp, e->stars_properties, e->feedback_props,
+                e->physical_constants, e->internal_units,
+                (e->policy & engine_policy_cosmology), e->cosmology,
+                e->ti_current, e->time, e->time_base);
 
   /* Gravity time-step */
   float new_dt_self = FLT_MAX, new_dt_ext = FLT_MAX;

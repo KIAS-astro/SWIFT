@@ -604,6 +604,16 @@ __attribute__((always_inline)) INLINE static void hydro_kick_extra(
     const struct cosmology *cosmo, const struct hydro_props *hydro_props,
     const struct entropy_floor_properties *floor_props) {
 
+  /* Velocity change kick_part() applied to v_full before calling us. */
+  float dv_kick[3] = {p->a_hydro[0] * dt_hydro, p->a_hydro[1] * dt_hydro,
+                      p->a_hydro[2] * dt_hydro};
+  if (p->gpart) {
+    for (int k = 0; k < 3; k++)
+      dv_kick[k] += p->gpart->a_grav[k] * dt_grav +
+                    p->gpart->a_grav_mesh[k] * dt_grav_mesh;
+  }
+  hydro_velocities_absorb_external_kick(p, xp, dv_kick);
+
   /* Add gravity. We only do this if we have gravity activated. */
   if (p->gpart) {
     /* Retrieve the current value of the gravitational acceleration from the

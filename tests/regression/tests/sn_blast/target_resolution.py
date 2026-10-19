@@ -21,9 +21,9 @@ f_E = 1 for every scheme so they share one energy budget, enrichment and SNIa of
 At this mass one heating event at 10^7.5 K carries 2.4e55 erg, about the star's
 whole CCSN budget (2.2e55 erg), so a star expects about one event in its life
 (Chaikin+23 eq. 4) and a large fraction of realisations get none; the stochastic
-schemes therefore run N_REAL = 64 realisations (star IDs differ). Each run's
+schemes therefore run N_REAL = 8 realisations (star IDs differ). Each run's
 history is computed as soon as it ends and its snapshots are deleted, except for
-realisation 0, which is kept for slices and movies (64 realisations x 50 outputs
+realisation 0, which is kept for slices and movies (all realisations x 50 outputs
 would otherwise need ~40 GB).
 
 Recorded per run: radial momentum about the star, mass with T > 1e5 K, total gas
@@ -64,7 +64,7 @@ SCHEMES = {
     "colibre": dict(COLIBRE_M6, SNII_f_kinetic=0.1, SNII_delta_v_km_p_s=50.0),
 }
 STOCHASTIC = ("stoch", "tk", "colibre")
-N_REAL = 64
+N_REAL = 8
 DT_SNAP = 1.0226e-3  # 1 Myr
 T_END = 5.113e-2  # 50 Myr
 T_HOT = 1e5

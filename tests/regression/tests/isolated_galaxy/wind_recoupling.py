@@ -22,7 +22,11 @@ the loading set, e.g. highspec_pres3):
           d_min = max(1 kpc, 2 kernel supports), backstops 50 kpc, 25 Myr
   pres3   the same with R = 3 kpc
   zrec    distance recoupling as dist, loadings times eta(d_rec)/eta(H)
+  pres3dt pres3 with the decoupled time-step cap 0.1 Myr instead of 1 Myr (how
+          much of the recoupling distance is overshoot within one step)
 Length SWIFT_REG_WR_TEND_MYR (default 1000), snapshots every 10 Myr.
+SWIFT_REG_WR_SEED (optional) builds with --with-random-seed=<seed>, for repeats
+that differ only in the random draws.
 
 Checks:
   1. each run reached its end time;
@@ -54,9 +58,14 @@ GALAXY = os.environ.get("SWIFT_REG_WR_GALAXY", "ark")
 DESCRIPTION = "Experiment A: distance vs pressure recoupling vs loadings at d_rec"
 TIER = "long"
 if GALAXY == "ark":
-    BUILDS = {"ark": ark.BUILDS["ark"]}
+    BUILDS = {"ark": list(ark.BUILDS["ark"])}
 else:
     BUILDS = {"h12": prfm_disc.BUILDS["prfm"] + ["--with-wind=TIGRESS"]}
+# Another realisation of the random draws (launch, direction, star formation):
+# SWIFT_REG_WR_SEED is passed to configure as --with-random-seed
+if os.environ.get("SWIFT_REG_WR_SEED"):
+    for b in BUILDS.values():
+        b.append("--with-random-seed=" + os.environ["SWIFT_REG_WR_SEED"])
 
 MYR = units.MYR / units.UNIT_TIME
 T_END_MYR = float(os.environ.get("SWIFT_REG_WR_TEND_MYR", "1000"))
@@ -73,6 +82,9 @@ VARIANTS = {
               "recoupling_distance_kpc": 50.0, "recoupling_min_distance_kpc": 1.0},
     "zrec": {"recoupling": "distance", "recoupling_distance_kpc": 2.0,
              "loading_height": "recoupling"},
+    "pres3dt": {"recoupling": "pressure", "cc85_launch_radius_kpc": 3.0,
+                "recoupling_distance_kpc": 50.0, "recoupling_min_distance_kpc": 1.0,
+                "max_timestep_Myr": 0.1},
 }
 COMMON = {"recoupling_kernel_factor": 2.0, "recoupling_time_Myr": 25.0,
           "max_timestep_Myr": 1.0, "launch_direction": [0.0, 0.0, 1.0]}
@@ -84,11 +96,11 @@ def all_runs():
         runs["nowind"] = {"loading_model": "none"}
         for spec in ("highspec", "lowspec"):
             for v, w in VARIANTS.items():
-                runs[f"{spec}_{v}"] = dict(ark.WINDS[spec], **COMMON, **w)
+                runs[f"{spec}_{v}"] = {**ark.WINDS[spec], **COMMON, **w}
     else:
         runs["nowind"] = {"loading_model": "none"}
         for v, w in VARIANTS.items():
-            runs[v] = dict({"loading_model": "TIGRESS"}, **COMMON, **w)
+            runs[v] = {"loading_model": "TIGRESS", **COMMON, **w}
     return runs
 
 

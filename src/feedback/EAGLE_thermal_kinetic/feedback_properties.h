@@ -186,6 +186,19 @@ struct feedback_props {
    * density in cgs */
   double rho_to_n_cgs;
 
+  /*! Conversion factor from physical density to rho / m_p in cgs [cm^-3] */
+  double rho_to_nb_cgs;
+
+  /*! Is f_E a function of the birth pressure (COLIBRE) instead of EAGLE's
+   * birth density and metallicity? */
+  int f_E_pressure;
+
+  /*! Birth pressure P / k_B at which f_E is half-way [K cm^-3] */
+  double P_0_cgs;
+
+  /*! Width of the f_E transition in log10 of the birth pressure [dex] */
+  double sigma_P;
+
   /*! Conversion factor from temperature to internal energy */
   float temp_to_u_factor;
 
@@ -245,8 +258,19 @@ struct feedback_props {
   /*! Fraction of the SNII energy injected in kinetic form */
   float SNII_f_kinetic;
 
-  /*! Temperature change of a gas particle heated by SNII (internal units) */
+  /*! Temperature change of a gas particle heated by SNII (internal units); with
+   * the density-dependent model, the value at the pivot density */
   float SNe_deltaT_desired;
+
+  /*! Does the SNII temperature change depend on the density at the star? */
+  int SNII_delta_T_density_dependent;
+
+  /*! Pivot density of the density-dependent temperature change [cm^-3] */
+  float SNII_delta_T_n_pivot_cgs;
+
+  /*! Bounds of the density-dependent temperature change (internal units) */
+  float SNII_delta_T_min;
+  float SNII_delta_T_max;
 
   /*! Energy released by one supernova type II in cgs units */
   double E_SNII_cgs;

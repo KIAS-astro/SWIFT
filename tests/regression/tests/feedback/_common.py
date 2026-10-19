@@ -49,11 +49,12 @@ def snii_per_msun(m_min=8.0, m_max=100.0):
     return quad(chabrier, m_min, m_max, points=[1.0] if m_min < 1 else None)[0] / norm
 
 
-def setup(ctx, feedback_overrides, n_stars=N_STARS, t_end=T_END):
+def setup(ctx, feedback_overrides, n_stars=N_STARS, t_end=T_END, nH=NH,
+          star_mass_in_gas_masses=STAR_MASS_IN_GAS_MASSES):
     """Write ICs and parameters; return (params, gas mass, star mass) in cgs."""
-    gas, _ = ics.uniform_gas(N, BOX, NH, T_GAS)
+    gas, _ = ics.uniform_gas(N, BOX, nH, T_GAS)
     rng = np.random.default_rng(SEED)
-    mstar = STAR_MASS_IN_GAS_MASSES * gas["Masses"][0]
+    mstar = star_mass_in_gas_masses * gas["Masses"][0]
     stars = {
         "Coordinates": rng.uniform(0, BOX, size=(n_stars, 3)),
         "Velocities": np.zeros((n_stars, 3)),

@@ -51,6 +51,23 @@ double eagle_feedback_energy_fraction(const struct spart *sp,
   /* Model parameters */
   const double f_E_max = props->f_E_max;
   const double f_E_min = props->f_E_min;
+
+  if (props->f_E_pressure) {
+
+    /* Stars without a recorded birth state (e.g. from the ICs) get f_E_max */
+    if (sp->birth_density < 0.f || sp->birth_temperature < 0.f) return f_E_max;
+
+    /* Birth pressure as defined by Schaye et al. (2026, footnote 16):
+     * P / k_B = rho T / m_p, with no mean molecular weight [K cm^-3] */
+    const double P_birth_cgs =
+        sp->birth_density * props->rho_to_nb_cgs * sp->birth_temperature;
+
+    /* Schaye et al. (2026), eq. 20 */
+    const double x =
+        (log10(max(P_birth_cgs, 1e-30)) - log10(props->P_0_cgs)) / props->sigma_P;
+    return f_E_min + (f_E_max - f_E_min) / (1. + exp(-x));
+  }
+
   const double Z_0 = props->Z_0;
   const double n_0 = props->n_0_cgs;
   const double n_Z = props->n_Z;
@@ -101,6 +118,28 @@ double eagle_feedback_energy_fraction(const struct spart *sp,
  * @param max_dying_mass_Msun Maximal star mass dying this step (in solar
  * masses).
  */
+/**
+ * @brief Temperature change of a gas particle heated by SNII.
+ *
+ * Constant, or SNII_delta_T_K (n_H / n_pivot)^(2/3) clamped to
+ * [SNII_delta_T_min_K, SNII_delta_T_max_K]: the slope 2/3 inverts the critical
+ * density of Dalla Vecchia & Schaye (2012), n_crit ~ Delta T^(3/2).
+ *
+ * @param props The properties of the feedback model.
+ * @param ngb_nH_cgs Hydrogen number density of the gas around the star [cm^-3].
+ */
+INLINE static double eagle_feedback_temperature_change(
+    const struct feedback_props *props, const double ngb_nH_cgs) {
+
+  if (!props->SNII_delta_T_density_dependent) return props->SNe_deltaT_desired;
+
+  const double delta_T =
+      props->SNe_deltaT_desired *
+      pow(ngb_nH_cgs / props->SNII_delta_T_n_pivot_cgs, 2. / 3.);
+  const double delta_T_above_min = max(delta_T, props->SNII_delta_T_min);
+  return min(delta_T_above_min, props->SNII_delta_T_max);
+}
+
 INLINE static void compute_SNII_feedback(
     struct spart *sp, const double star_age, const double dt,
     const int ngb_gas_N, const float ngb_gas_mass, const double ngb_nH_cgs,
@@ -229,7 +268,8 @@ INLINE static void compute_SNII_feedback(
 
     if (E_SN_thermal > 0.) {
 
-      const double delta_T = feedback_props->SNe_deltaT_desired;
+      const double delta_T =
+          eagle_feedback_temperature_change(feedback_props, ngb_nH_cgs);
       const double conv_factor = feedback_props->temp_to_u_factor;
 
       /* Heating probability per neighbour (accounting for round-off) */
@@ -541,6 +581,29 @@ void feedback_props_init(struct feedback_props *fp,
   fp->SNe_deltaT_desired /=
       units_cgs_conversion_factor(us, UNIT_CONV_TEMPERATURE);
 
+  /* Constant temperature change, or one that scales with the gas density at
+   * the star as in COLIBRE (Schaye et al. 2026, eq. 18) */
+  char delta_T_model[PARSER_MAX_LINE_SIZE] = "Constant";
+  parser_get_opt_param_string(params, "EAGLEFeedback:SNII_delta_T_model",
+                              delta_T_model, "Constant");
+  if (strcmp(delta_T_model, "Constant") == 0) {
+    fp->SNII_delta_T_density_dependent = 0;
+  } else if (strcmp(delta_T_model, "DensityDependent") == 0) {
+    fp->SNII_delta_T_density_dependent = 1;
+    fp->SNII_delta_T_n_pivot_cgs = parser_get_param_float(
+        params, "EAGLEFeedback:SNII_delta_T_n_pivot_H_p_cm3");
+    fp->SNII_delta_T_min =
+        parser_get_param_float(params, "EAGLEFeedback:SNII_delta_T_min_K") /
+        units_cgs_conversion_factor(us, UNIT_CONV_TEMPERATURE);
+    fp->SNII_delta_T_max =
+        parser_get_param_float(params, "EAGLEFeedback:SNII_delta_T_max_K") /
+        units_cgs_conversion_factor(us, UNIT_CONV_TEMPERATURE);
+    if (fp->SNII_delta_T_min > fp->SNII_delta_T_max)
+      error("SNII_delta_T_min_K must not exceed SNII_delta_T_max_K");
+  } else {
+    error("Invalid EAGLEFeedback:SNII_delta_T_model '%s'", delta_T_model);
+  }
+
   /* Stellar mass limits for SNII feedback */
   const double SNII_min_mass_msun =
       parser_get_param_double(params, "EAGLEFeedback:SNII_min_mass_Msun");
@@ -570,6 +633,25 @@ void feedback_props_init(struct feedback_props *fp,
       parser_get_param_double(params, "EAGLEFeedback:SNII_energy_fraction_n_n");
   fp->n_Z =
       parser_get_param_double(params, "EAGLEFeedback:SNII_energy_fraction_n_Z");
+
+  /* f_E from EAGLE's birth density and metallicity, or from the birth pressure
+   * (COLIBRE; Schaye et al. 2026, eq. 20) */
+  char f_E_function[PARSER_MAX_LINE_SIZE] = "EAGLE";
+  parser_get_opt_param_string(params,
+                              "EAGLEFeedback:SNII_energy_fraction_function",
+                              f_E_function, "EAGLE");
+  if (strcmp(f_E_function, "EAGLE") == 0) {
+    fp->f_E_pressure = 0;
+  } else if (strcmp(f_E_function, "Pressure") == 0) {
+    fp->f_E_pressure = 1;
+    fp->P_0_cgs = parser_get_param_double(
+        params, "EAGLEFeedback:SNII_energy_fraction_P_0_K_p_cm3");
+    fp->sigma_P = parser_get_param_double(
+        params, "EAGLEFeedback:SNII_energy_fraction_sigma_P");
+  } else {
+    error("EAGLE-thermal-kinetic supports SNII_energy_fraction_function EAGLE "
+          "or Pressure, not '%s'", f_E_function);
+  }
 
   /* Check that it makes sense. */
   if (fp->f_E_max < fp->f_E_min) {
@@ -693,6 +775,7 @@ void feedback_props_init(struct feedback_props *fp,
   const double X_H = hydro_props->hydrogen_mass_fraction;
   fp->rho_to_n_cgs =
       (X_H / m_p) * units_cgs_conversion_factor(us, UNIT_CONV_NUMBER_DENSITY);
+  fp->rho_to_nb_cgs = fp->rho_to_n_cgs / X_H;
 
   /* Initialise the IMF ------------------------------------------------- */
 

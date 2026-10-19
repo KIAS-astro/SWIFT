@@ -29,7 +29,7 @@ T_GAS = 1e4
 N_STARS = 128
 STAR_MASS_IN_GAS_MASSES = 20.0
 T_END = 0.0512  # internal units, 50.1 Myr
-N_SNAP = 5
+N_SNAP = 25
 SEED = 2026
 
 FLAGS = ["--hydro", "--stars", "--feedback", "--external-gravity",

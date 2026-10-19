@@ -730,15 +730,16 @@ void runner_do_timestep(struct runner *r, struct cell *c, const int timer) {
          * enough. It rejoins the hydro on the shortest time-step of this
          * step, so that its neighbours are woken by the limiter. */
         int recoupled = 0;
-        if (part_is_decoupled(p) &&
-            wind_should_recouple(p, e->wind_props, e->time)) {
-          wind_recouple(
-              p, xp, e->wind_props, cosmo, e->time,
-              wind_specific_potential(
-                  p, e->external_potential, e->physical_constants, cosmo,
-                  e->policy & engine_policy_self_gravity,
-                  e->policy & engine_policy_external_gravity, e->time));
-          recoupled = 1;
+        if (part_is_decoupled(p)) {
+          const float phi = wind_specific_potential(
+              p, e->external_potential, e->physical_constants, cosmo,
+              e->policy & engine_policy_self_gravity,
+              e->policy & engine_policy_external_gravity, e->time);
+          wind_set_pending_launch_potential(p, phi);
+          if (wind_should_recouple(p, e->wind_props, e->time)) {
+            wind_recouple(p, xp, e->wind_props, cosmo, e->time, phi);
+            recoupled = 1;
+          }
         }
 
         /* Get new time-step */

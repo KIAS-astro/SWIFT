@@ -69,6 +69,10 @@ __attribute__((always_inline)) INLINE static float wind_specific_kinetic(
  * the self-gravity potential of the last force calculation plus the external
  * potential.
  *
+ * With self-gravity the particle's potential already holds the external
+ * term, which external_gravity_acceleration() adds to it; without, the
+ * external potential is evaluated at the particle.
+ *
  * Valid for an active particle after the gravity tasks of the step, i.e. at
  * launch (star formation task) and recoupling (time-step task).
  *
@@ -87,12 +91,11 @@ INLINE static float wind_specific_potential(
     const double time) {
   const struct gpart *gp = p->gpart;
   if (gp == NULL) return 0.f;
-  float phi = 0.f;
-  if (with_self_gravity) phi += gravity_get_physical_potential(gp, cosmo);
+  if (with_self_gravity) return gravity_get_physical_potential(gp, cosmo);
   if (with_external_gravity)
-    phi += external_gravity_get_potential_energy(time, potential, phys_const,
+    return external_gravity_get_potential_energy(time, potential, phys_const,
                                                  gp);
-  return phi;
+  return 0.f;
 }
 
 /**
@@ -138,14 +141,13 @@ INLINE static float wind_recoupling_distance(const struct part *p,
  * A particle flagged as decoupled in the initial conditions (field
  * WindDecoupled) is launched at the start time with its initial velocity and
  * internal energy: this is how the tests decouple particles by hand. Such
- * a launch is counted in the global totals. Its launch potential is the
- * external one only, since no gravity has been computed yet.
- *
- * @param phi The external potential per unit mass at the particle.
+ * a launch is counted in the global totals. Its launch potential is set at
+ * its first time-step (wind_set_pending_launch_potential()), since no
+ * gravity has been computed yet.
  */
 INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
                                         const struct wind_props *props,
-                                        const double time, const float phi) {
+                                        const double time) {
 
   const char decoupled = p->wind_data.decoupled;
   for (int k = 0; k < 3; k++) {
@@ -156,6 +158,7 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.launch_e_kin = -1.f;
   p->wind_data.launch_e_th = -1.f;
   p->wind_data.launch_phi = 0.f;
+  p->wind_data.launch_phi_pending = decoupled ? 1 : 0;
   p->wind_data.recouple_time = -1.f;
   p->wind_data.recouple_e_kin = -1.f;
   p->wind_data.recouple_e_th = -1.f;
@@ -173,7 +176,6 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
     p->wind_data.launch_time = time;
     p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
     p->wind_data.launch_e_th = xp->u_full;
-    p->wind_data.launch_phi = phi;
     p->wind_data.launch_count = 1;
     const double m = hydro_get_mass(p);
     atomic_add_d(&wind_global_stats.n_launch, 1.);
@@ -186,6 +188,20 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
      * pressure and sound speed set in the kick finite */
     if (p->rho <= 0.f) p->rho = hydro_get_mass(p) / (p->h * p->h * p->h);
   }
+}
+
+/**
+ * @brief Set the launch potential of a particle decoupled in the initial
+ * conditions, at its first time-step (the first time its potential exists).
+ *
+ * @param phi The gravitational potential per unit mass at the particle
+ * (wind_specific_potential()).
+ */
+INLINE static void wind_set_pending_launch_potential(struct part *p,
+                                                     const float phi) {
+  if (!p->wind_data.launch_phi_pending) return;
+  p->wind_data.launch_phi = phi;
+  p->wind_data.launch_phi_pending = 0;
 }
 
 /**

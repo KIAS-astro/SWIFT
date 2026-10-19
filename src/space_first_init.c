@@ -149,12 +149,7 @@ void space_first_init_parts_mapper(void *restrict map_data, int count,
     rt_first_init_part(&p[k], cosmo, rt_props);
 
     /* And the decoupled wind */
-    wind_first_init_part(
-        &p[k], &xp[k], s->e->wind_props, s->e->time,
-        wind_specific_potential(&p[k], e->external_potential, phys_const,
-                                cosmo, /*with_self_gravity=*/0,
-                                e->policy & engine_policy_external_gravity,
-                                e->time));
+    wind_first_init_part(&p[k], &xp[k], s->e->wind_props, s->e->time);
 
 #ifdef SWIFT_DEBUG_CHECKS
     /* Check part->gpart->part linkeage. */

@@ -54,7 +54,10 @@ INLINE static float wind_specific_potential(
 
 INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
                                         const struct wind_props *props,
-                                        const double time, const float phi) {}
+                                        const double time) {}
+
+INLINE static void wind_set_pending_launch_potential(struct part *p,
+                                                     const float phi) {}
 
 /**
  * @brief Does a star form? The comparison of the star formation modules,

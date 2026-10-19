@@ -196,8 +196,18 @@ def _tracer(ctx, snap):
         "f_M_beyond_0.1R200": float(snap.read(0, "WindTracerMasses", cgs=False)[out].sum()
                                     / row["m_launch"]),
         "shell_edges_kpc": edges.tolist(), "shell_E_over_launched": shells})
+    # Per particle: received + potential gained against launch energy. A lost
+    # update of the external term in the particle potential (the race between
+    # the external-gravity task and the self-gravity tasks) gives ~0.2.
+    has = E_tl > 0
+    resid = np.abs(E_tr[has] + E_pot[has] - E_tl[has]) / E_tl[has]
+    ctx.info["tracer_flight_residual_max"] = float(resid.max()) if has.any() else 0.0
     return [Check("tracer: |gas + flight + stars - launched| / launched",
                   abs(total - E_launch) / E_launch, 1e-5, kind="max",
                   source="exact identity at the snapshot time (log line within "
                          f"{abs(row['t'] - snap.time) / MYR_INTERNAL:.3g} Myr); "
-                         "float fields")]
+                         "float fields"),
+            Check("tracer: max per particle |E_rec + dE_pot - E_launch| / E_launch",
+                  resid.max() if has.any() else 0.0, 1e-2, kind="max",
+                  source="gravity only in flight; measured 8e-4 in the time-varying "
+                         "potential of the disc")]

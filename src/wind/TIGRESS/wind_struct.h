@@ -51,6 +51,10 @@ struct wind_part_data {
   /*! Gravitational potential per mass at the last launch */
   float launch_phi;
 
+  /*! 1 until launch_phi is set at the first time-step of a particle
+   * decoupled in the initial conditions, when its potential first exists */
+  char launch_phi_pending;
+
   /*! Time of the last recoupling */
   float recouple_time;
 

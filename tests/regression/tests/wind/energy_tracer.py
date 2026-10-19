@@ -29,7 +29,19 @@ Checks:
      potential energy against the tracer launch energy, relative 1e-5 (the
      leapfrog in a constant field conserves it up to the float rounding of
      v_full, wind/recouple check 5).
+
+A second run repeats the set-up with self-gravity (mesh 32^3, softening
+0.05 kpc), where the particle's potential holds the external term as well.
+Checks 1-3 as above, and:
+  4'. max |dphi + g dz| / (g |dz|) < 0.05: the gas's own potential changes
+      by about G rho dz^2, 3e-3 of g dz; adding the external potential a
+      second time would give 1;
+  5'. in-flight conservation to 1e-5 (measured 2.1e-6): the launch potential
+      of a particle decoupled in the ICs is taken at its first time-step,
+      with the self-gravity term; without it the error is about 3e-4.
 """
+
+import os
 
 import numpy as np
 
@@ -44,6 +56,7 @@ TIER = "quick"
 BUILDS = {"wind": _common.WIND_BUILD}
 FLAGS = recouple.FLAGS
 
+SG_CONSERVATION_TOL = 1e-5
 FIELDS = ["WindTracerMasses", "WindTracerEnergies", "WindTracerPotentialEnergies",
           "WindTracerLaunchEnergies", "WindLaunchPotentials", "WindRecouplingPotentials"]
 
@@ -59,6 +72,12 @@ def run(ctx):
                  "recoupling_time_Myr": recouple.T_REC}
     ctx.swift(p, FLAGS, name="tracer", timeout=1800)
 
+    os.makedirs(ctx.path("sg"))
+    recouple.write_ics(ctx.path("sg", "ics.hdf5"))
+    p["Gravity"].update({"mesh_side_length": 32, "max_physical_baryon_softening": 0.05,
+                         "max_physical_DM_softening": 0.05})
+    ctx.swift(p, FLAGS + ["--self-gravity"], name="tracer_sg", subdir="sg", timeout=1800)
+
 
 def _sums(snap):
     m = snap.read(0, "Masses", cgs=False).astype(np.float64)
@@ -71,10 +90,17 @@ def _sums(snap):
 
 
 def analyze(ctx):
+    checks = _analyze(ctx, ctx.run_dir, ctx.path("tracer.log"), "", sg=False)
+    checks += _analyze(ctx, ctx.path("sg"), ctx.path("sg", "tracer_sg.log"),
+                       "self-gravity: ", sg=True)
+    return checks
+
+
+def _analyze(ctx, run_dir, log_path, tag, sg):
     checks = []
-    snaps = snapshots(ctx.run_dir)
+    snaps = snapshots(run_dir)
     last = snaps[-1]
-    rows = _common.wind_totals(ctx.path("tracer.log"))
+    rows = _common.wind_totals(log_path)
     tail = rows[-1]
     E_launch = tail["E_kin_launch"] + tail["E_th_launch"]
     n_wind = recouple.N_FAST + recouple.N_SLOW
@@ -122,19 +148,32 @@ def analyze(ctx):
     dz = last.read(0, "WindDisplacements", cgs=False)[rec, 2].astype(np.float64)
     dphi = (last.read(0, "WindRecouplingPotentials", cgs=False)[rec].astype(np.float64)
             - last.read(0, "WindLaunchPotentials", cgs=False)[rec])
-    checks.append(Check("max |dphi + g dz| / (g L)",
-                        (np.abs(dphi + g * dz) / (g * recouple.L)).max(), 1e-6,
-                        kind="max", source="phi = -g.x for the constant field; float "
-                                           "phi of order g L / 2"))
-
     E_tr = tr["WindTracerEnergies"].sum() + tr["WindTracerPotentialEnergies"].sum()
     E_tr0 = tr["WindTracerLaunchEnergies"].sum()
-    checks.append(Check("|tracer (E + dE_pot) / tracer launch - 1|", abs(E_tr / E_tr0 - 1),
-                        1e-5, kind="max", source="gravity only in flight"))
-    ctx.info.update({
+    dev = np.abs(dphi + g * dz)
+    if not sg:
+        checks.append(Check("max |dphi + g dz| / (g L)", (dev / (g * recouple.L)).max(),
+                            1e-6, kind="max", source="phi = -g.x for the constant field; "
+                                                     "float phi of order g L / 2"))
+        checks.append(Check("|tracer (E + dE_pot) / tracer launch - 1|",
+                            abs(E_tr / E_tr0 - 1), 1e-5, kind="max",
+                            source="gravity only in flight"))
+    else:
+        checks.append(Check(tag + "max |dphi + g dz| / (g |dz|)", (dev / (g * np.abs(dz))).max(),
+                            0.05, kind="max",
+                            source="the gas's own potential changes by G rho dz^2 ~ 3e-3 g dz; "
+                                   "counting the external term twice gives 1"))
+        checks.append(Check(tag + "|tracer (E + dE_pot) / tracer launch - 1|",
+                            abs(E_tr / E_tr0 - 1), SG_CONSERVATION_TOL, kind="max",
+                            source="potential at launch taken at the first step"))
+    checks = [c if c.name.startswith(tag) else
+              Check(tag + c.name, c.measured, c.expected, kind=c.kind, tol=c.tol,
+                    sigma=c.sigma, source=c.source) for c in checks]
+    ctx.info.update({tag + k: v for k, v in {
         "E_launch": E_launch, "flight_identity_max_rel": worst,
         "decoupled_per_snapshot": n_flight,
         "tracer_E_over_launch": tr["WindTracerEnergies"].sum() / E_launch,
         "tracer_dEpot_over_launch": tr["WindTracerPotentialEnergies"].sum() / E_launch,
-        "flight_conservation_rel": abs(E_tr / E_tr0 - 1)})
+        "max_dphi_dev_over_g_dz": float((dev / (g * np.abs(dz))).max()),
+        "flight_conservation_rel": abs(E_tr / E_tr0 - 1)}.items()})
     return checks

@@ -29,7 +29,7 @@ from swiftreg import params, units
 from swiftreg.checks import Check
 from swiftreg.snapshot import snapshots
 
-DESCRIPTION = "isolated MW-mass disc at 8e5 Msun: f_kin = 0, 0.1, 1 and COLIBRE Delta T(n)"
+DESCRIPTION = "isolated MW-mass disc (M6 or M5): f_kin = 0, 0.1, 1 and COLIBRE Delta T(n)"
 TIER = "long"
 BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-tracers=EAGLE",
                  "--with-entropy-floor=EAGLE", "--with-stars=EAGLE",
@@ -37,24 +37,32 @@ BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-trace
                  "--with-ext-potential=hernquist", "--with-number-of-SNII-rays=8",
                  "--with-feedback=EAGLE-thermal-kinetic"]}
 
+# Resolution and run subset from the environment, so that each run can be its
+# own cluster job: SWIFT_REG_ISOGAL_RES = M6 (default, 8e5 Msun, softening 0.4 kpc)
+# or M5 (1e5 Msun, 0.2 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names.
+RES = os.environ.get("SWIFT_REG_ISOGAL_RES", "M6")
+SOFTENING = {"M5": 0.2, "M6": 0.4}[RES]
+IC_NAME = f"{RES}_disk.hdf5"
 IC_URL = ("https://virgodb.cosma.dur.ac.uk/swift-webstorage/ICs/IsolatedGalaxies_COLIBRE/"
-          "M6_disk.hdf5")
+          + IC_NAME)
 T_END = 1.0227  # internal units (kpc / (km/s)), 1 Gyr
 DT_SNAP = 1.0227e-2  # 10 Myr
 COLIBRE_M6 = {"SNII_delta_T_model": "DensityDependent", "SNII_delta_T_K": 10 ** 6.5,
               "SNII_delta_T_n_pivot_H_p_cm3": 0.5, "SNII_delta_T_min_K": 10 ** 6.75,
               "SNII_delta_T_max_K": 1e8}
-RUNS = {
+ALL_RUNS = {
     "fkin0": {"SNII_f_kinetic": 0.0},
     "fkin0.1": {"SNII_f_kinetic": 0.1},
     "fkin1": {"SNII_f_kinetic": 1.0},
     "colibre": dict(COLIBRE_M6, SNII_f_kinetic=0.1),
 }
+_only = os.environ.get("SWIFT_REG_ISOGAL_RUNS")
+RUNS = {k: v for k, v in ALL_RUNS.items() if not _only or k in _only.split(",")}
 
 
 def ic_file(data_dir):
     import subprocess
-    path = os.path.join(data_dir, "ics", "M6_disk.hdf5")
+    path = os.path.join(data_dir, "ics", IC_NAME)
     if not os.path.exists(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         subprocess.run(["curl", "-fsSL", "-o", path + ".part", IC_URL], check=True)
@@ -68,18 +76,18 @@ def run(ctx):
     ics = ic_file(ctx.data_dir)
     for name, fb in RUNS.items():
         os.makedirs(ctx.path(name))
-        shutil.copy(ics, ctx.path(name, "M6_disk.hdf5"))
-        p = params.eagle_base("M6_disk.hdf5", T_END, ctx.data_dir, DT_SNAP, dt_max=1e-2)
+        shutil.copy(ics, ctx.path(name, IC_NAME))
+        p = params.eagle_base(IC_NAME, T_END, ctx.data_dir, DT_SNAP, dt_max=1e-2)
         p["InitialConditions"].update({"periodic": 0, "stars_smoothing_length": 0.5})
         p["Snapshots"]["compression"] = 4
-        p["Gravity"].update({"max_physical_DM_softening": 0.4,
-                             "max_physical_baryon_softening": 0.4})
+        p["Gravity"].update({"max_physical_DM_softening": SOFTENING,
+                             "max_physical_baryon_softening": SOFTENING})
         p["SPH"].update({"h_min_ratio": 0.1, "h_max": 10.0, "minimal_temperature": 100.0})
         p["Scheduler"] = {"max_top_level_cells": 16, "tasks_per_cell": 200}
         p["HernquistPotential"] = {
             "useabspos": 0, "position": [0.0, 0.0, 0.0], "idealizeddisk": 1,
             "M200": 137.0, "h": 0.704, "concentration": 9.0, "diskfraction": 0.040,
-            "bulgefraction": 0.014, "timestep_mult": 0.01, "epsilon": 0.4}
+            "bulgefraction": 0.014, "timestep_mult": 0.01, "epsilon": SOFTENING}
         p["EAGLEFeedback"].update({
             "SNII_energy_fraction_min": 2.0, "SNII_energy_fraction_max": 2.0,
             "SNII_delta_T_K": 10 ** 7.5, "SNII_delta_v_km_p_s": 50.0,

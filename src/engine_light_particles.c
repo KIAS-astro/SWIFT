@@ -232,7 +232,8 @@ static void light_merge_pair(struct engine *e, struct cell *c, struct part *a,
 static int light_wants_merge(const struct part *p, const struct engine *e,
                              const struct wind_props *props,
                              const double time) {
-  if (!part_is_active(p, e) || p->wind_data.decoupled || !p->wind_data.light)
+  if (p->time_bin == time_bin_inhibited || p->wind_data.decoupled ||
+      !p->wind_data.light)
     return 0;
   return hydro_get_mass(p) < 0.5 * wind_light_target_mass(p, props, time);
 }
@@ -245,10 +246,13 @@ static int light_wants_merge(const struct part *p, const struct engine *e,
  * particle below half its target. With its clock run out (f_w <= f_w,ref)
  * and no such partner, it merges with the nearest coupled gas particle that
  * stays below 3/2 m_g.
- * Both partners must be active, i.e. at the start of a time-step, so that
- * no half-kick or accumulated flux of the removed particle is left to
- * apply. The survivor is the partner on the shorter time-bin (lower id on a
- * tie).
+ * Partners may be in mid-step: the removed particle's pending hydro update
+ * (SPH acceleration and du/dt, mass-weighted; GIZMO fluxes, summed) passes to
+ * the survivor. A rebuild usually falls on a step where only the shortest
+ * time-bins are active, so requiring active partners would leave halo light
+ * particles, on long steps, almost never merged. The survivor is the partner
+ * on the shorter time-bin (lower id on a tie), whose integration state is
+ * kept.
  */
 static void light_merge_leaf(struct engine *e, struct cell *c) {
 
@@ -280,7 +284,7 @@ static void light_merge_leaf(struct engine *e, struct cell *c) {
     for (int j = 0; j < count; j++) {
       if (j == i) continue;
       const struct part *q = &parts[j];
-      if (!part_is_active(q, e) || q->wind_data.decoupled) continue;
+      if (q->time_bin == time_bin_inhibited || q->wind_data.decoupled) continue;
       double dx[3];
       light_separation(s, p->x, q->x, dx);
       const double r2 = dx[0] * dx[0] + dx[1] * dx[1] + dx[2] * dx[2];

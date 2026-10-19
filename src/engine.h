@@ -565,6 +565,9 @@ struct engine {
   /* Properties of the pressure floor scheme */
   struct pressure_floor_props *pressure_floor_props;
 
+  /* Properties of the decoupled wind */
+  struct wind_props *wind_props;
+
   /* Properties of the radiative transfer model */
   struct rt_props *rt_props;
 

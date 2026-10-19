@@ -37,6 +37,7 @@
 #include "random.h"
 #include "stars.h"
 #include "units.h"
+#include "wind.h"
 
 #define star_formation_need_update_dx_max 0
 
@@ -105,6 +106,9 @@ struct star_formation {
 
   /*! cgs time to internal units */
   double time_from_cgs;
+
+  /*! g cm^-2 s^-1 to Msun kpc^-2 yr^-1 */
+  double Sigma_SFR_cgs_to_Msun_kpc2_yr;
 
   /*! The face-on map */
   struct prfm_map_params map;
@@ -223,11 +227,20 @@ INLINE static void star_formation_compute_SFR(
 
   const double t_dep = state.t_dep * starform->time_from_cgs;
   xp->sf_data.SFR = hydro_get_mass(p) / t_dep;
+
+  /* Sigma_SFR = W / Upsilon_tot = Sigma_g / t_dep, Sigma_g = 2 W H_g /
+   * sigma_eff^2 */
+  const double Sigma_g_cgs =
+      2. * state.W * state.H_g / (state.sigma_eff * state.sigma_eff);
+  xp->sf_data.Sigma_SFR = Sigma_g_cgs / state.t_dep *
+                          starform->Sigma_SFR_cgs_to_Msun_kpc2_yr;
 }
 
 /**
  * @brief Decides whether a particle should be converted into a
- * star or not: probability SFR dt / m_g, as the EAGLE module.
+ * star or not: probability SFR dt / m_g, as the EAGLE module. With a
+ * decoupled wind the same uniform number also decides the launch
+ * (src/wind.h), so that star and wind exclude each other.
  *
  * @param p The #part.
  * @param xp The #xpart.
@@ -244,7 +257,8 @@ INLINE static int star_formation_should_convert_to_star(
   const double prob = xp->sf_data.SFR * dt_star / hydro_get_mass(p);
   const double random_number =
       random_unit_interval(p->id, e->ti_current, random_number_star_formation);
-  return (prob > random_number);
+  return wind_star_formation_draw(e->wind_props, p, xp, prob,
+                                  random_number) == 1;
 }
 
 /**
@@ -484,6 +498,11 @@ INLINE static void starformation_init_backend(
       1. / units_cgs_conversion_factor(us, UNIT_CONV_TIME);
   starform->rho_to_n_H_cgs =
       starform->rho_to_cgs / (1.4 * phys_const->const_proton_mass * mass_cgs);
+  const double time_cgs = units_cgs_conversion_factor(us, UNIT_CONV_TIME);
+  const double kpc_cgs = 1e3 * phys_const->const_parsec * length_cgs;
+  starform->Sigma_SFR_cgs_to_Msun_kpc2_yr =
+      kpc_cgs * kpc_cgs * phys_const->const_year * time_cgs /
+      (phys_const->const_solar_mass * mass_cgs);
 
   prfm_map_params_init(&starform->map, parameter_file, phys_const);
 

@@ -33,6 +33,7 @@
 #include "threadpool.h"
 #include "tools.h"
 #include "version.h"
+#include "wind_io.h"
 
 /* I/O functions of each sub-module */
 #include "black_holes_io.h"
@@ -1781,6 +1782,7 @@ void io_select_hydro_fields(const struct part *const parts,
                                          with_cosmology);
   *num_fields +=
       star_formation_write_particles(parts, xparts, list + *num_fields);
+  *num_fields += wind_write_particles(parts, xparts, list + *num_fields);
   if (with_rt) {
     *num_fields += rt_write_particles(parts, list + *num_fields);
   }

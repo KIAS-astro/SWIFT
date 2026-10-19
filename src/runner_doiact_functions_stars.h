@@ -129,6 +129,7 @@ void DOSELF1_STARS(struct runner *r, const struct cell *c, const int offset,
 
       /* Early abort? */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       /* Compute the pairwise distance. */
       const float pjx[3] = {(float)(pj->x[0] - c->loc[0]),
@@ -299,6 +300,7 @@ void DO_NONSYM_PAIR1_STARS_NAIVE(struct runner *r,
 
       /* Skip inhibited particles. */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       /* Compute the pairwise distance. */
       const float pjx[3] = {(float)(pj->x[0] - cj->loc[0]),
@@ -502,6 +504,7 @@ void DO_SYM_PAIR1_STARS(struct runner *r, const struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         const float hj = pj->h;
         const float pjx = pj->x[0] - cj->loc[0];
@@ -674,6 +677,7 @@ void DO_SYM_PAIR1_STARS(struct runner *r, const struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pi, e)) continue;
+        if (part_is_decoupled(pi)) continue;
 
         const float hi = pi->h;
         const float pix = pi->x[0] - (cj->loc[0] + shift[0]);
@@ -862,6 +866,7 @@ void DOPAIR1_SUBSET_STARS(struct runner *r, const struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         const double pjx = pj->x[0];
         const double pjy = pj->x[1];
@@ -925,6 +930,7 @@ void DOPAIR1_SUBSET_STARS(struct runner *r, const struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         const double pjx = pj->x[0];
         const double pjy = pj->x[1];
@@ -1027,6 +1033,7 @@ void DOPAIR1_SUBSET_STARS_NAIVE(struct runner *r,
 
       /* Skip inhibited particles */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       const double pjx = pj->x[0];
       const double pjy = pj->x[1];
@@ -1117,6 +1124,7 @@ void DOSELF1_SUBSET_STARS(struct runner *r, const struct cell *ci,
 
       /* Early abort? */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       /* Compute the pairwise distance. */
       const float pjx[3] = {(float)(pj->x[0] - ci->loc[0]),

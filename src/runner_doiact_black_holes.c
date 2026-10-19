@@ -30,6 +30,7 @@
 #include "runner.h"
 #include "space_getsid.h"
 #include "timers.h"
+#include "wind.h"
 
 /* Import the black hole density loop functions. */
 #define FUNCTION density

@@ -38,6 +38,7 @@
 #include "space_getsid.h"
 #include "star_formation_iact.h"
 #include "timers.h"
+#include "wind.h"
 #include "timestep_limiter_iact.h"
 
 /* Import the density loop functions. */

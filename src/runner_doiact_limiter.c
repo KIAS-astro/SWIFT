@@ -29,6 +29,7 @@
 #include "runner.h"
 #include "space_getsid.h"
 #include "timers.h"
+#include "wind.h"
 #include "timestep_limiter_iact.h"
 
 /* Import the limiter loop functions. */

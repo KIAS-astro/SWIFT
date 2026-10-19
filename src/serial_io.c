@@ -61,6 +61,7 @@
 #include "tools.h"
 #include "units.h"
 #include "version.h"
+#include "wind_io.h"
 #include "xmf.h"
 
 /* Max number of entries that can be written for a given particle type */
@@ -839,6 +840,7 @@ void read_ic_serial(char *fileName, const struct unit_system *internal_units,
               hydro_read_particles(*parts, list, &num_fields);
               num_fields += mhd_read_particles(*parts, list + num_fields);
               num_fields += chemistry_read_particles(*parts, list + num_fields);
+              num_fields += wind_read_particles(*parts, list + num_fields);
               num_fields += rt_read_particles(*parts, list + num_fields);
             }
             break;

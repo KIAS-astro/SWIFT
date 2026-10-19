@@ -3236,6 +3236,34 @@ case "$with_star_formation" in
    ;;
 esac
 
+#  Decoupled galactic wind
+AC_ARG_WITH([wind],
+    [AS_HELP_STRING([--with-wind=<model>],
+       [decoupled galactic wind @<:@none, TIGRESS, default: none@:>@
+       TIGRESS needs --with-star-formation=PRFM and --with-hydro=sphenix.]
+    )],
+    [with_wind="$withval"],
+    [with_wind="none"]
+)
+
+case "$with_wind" in
+   none)
+      AC_DEFINE([WIND_NONE], [1], [No decoupled wind])
+   ;;
+   TIGRESS)
+      if test "$with_star_formation" != "PRFM"; then
+         AC_MSG_ERROR([--with-wind=TIGRESS needs --with-star-formation=PRFM])
+      fi
+      if test "$with_hydro" != "sphenix"; then
+         AC_MSG_ERROR([--with-wind=TIGRESS needs --with-hydro=sphenix])
+      fi
+      AC_DEFINE([WIND_TIGRESS], [1], [Decoupled wind with TIGRESS loadings (Kim et al. 2020)])
+   ;;
+   *)
+      AC_MSG_ERROR([Unknown wind model])
+   ;;
+esac
+
 AC_ARG_WITH([gadget2-physical-constants],
     [AS_HELP_STRING([--with-gadget2-physical-constants],
        [Use the same physical constants (G, Msun, Mpc) as the Gadget-2 code rather than more up-to-date values.]
@@ -3594,6 +3622,7 @@ AC_MSG_RESULT([
    Tracers              : $with_tracers
    Stellar model        : $with_stars
    Star formation model : $with_star_formation
+   Decoupled wind       : $with_wind
    Star feedback model  : $with_feedback_name
    Sink particle model  : $with_sink
    Black holes model    : $with_black_holes

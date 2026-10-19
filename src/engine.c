@@ -90,6 +90,7 @@
 #include "potential.h"
 #include "power_spectrum.h"
 #include "pressure_floor.h"
+#include "wind_properties.h"
 #include "profiler.h"
 #include "proxy.h"
 #include "restart.h"
@@ -1770,6 +1771,9 @@ void engine_print_stats(struct engine *e) {
   if (e->nodeID == 0)
     stats_write_to_file(e->file_stats, &global_stats, e->time, e->cosmology->a,
                         e->cosmology->z, e->step);
+
+  /* Totals of the decoupled wind */
+  wind_print_stats(e);
 
   /* Flag that we dumped some statistics */
   e->step_props |= engine_step_prop_statistics;
@@ -4174,6 +4178,7 @@ void engine_struct_dump(struct engine *e, FILE *stream) {
   starformation_struct_dump(e->star_formation, stream);
   feedback_struct_dump(e->feedback_props, stream);
   pressure_floor_struct_dump(e->pressure_floor_props, stream);
+  wind_struct_dump(e->wind_props, stream);
   rt_struct_dump(e->rt_props, stream);
   black_holes_struct_dump(e->black_holes_properties, stream);
   sink_struct_dump(e->sink_properties, stream);
@@ -4313,6 +4318,11 @@ void engine_struct_restore(struct engine *e, FILE *stream) {
           sizeof(struct pressure_floor_props));
   pressure_floor_struct_restore(pressure_floor_properties, stream);
   e->pressure_floor_props = pressure_floor_properties;
+
+  struct wind_props *wind_properties =
+      (struct wind_props *)malloc(sizeof(struct wind_props));
+  wind_struct_restore(wind_properties, stream);
+  e->wind_props = wind_properties;
 
   struct rt_props *rt_properties =
       (struct rt_props *)malloc(sizeof(struct rt_props));

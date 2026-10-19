@@ -62,6 +62,7 @@
 #include "timers.h"
 #include "timestep_limiter.h"
 #include "tracers.h"
+#include "wind.h"
 
 extern const int sort_stack_size;
 
@@ -165,8 +166,9 @@ void runner_do_cooling(struct runner *r, struct cell *c, const int offset,
       struct part *restrict p = &parts[i];
       struct xpart *restrict xp = &xparts[i];
 
-      /* Anything to do here? (i.e. does this particle need updating?) */
-      if (part_is_active(p, e)) {
+      /* Anything to do here? (i.e. does this particle need updating?)
+       * Decoupled wind particles do not cool. */
+      if (part_is_active(p, e) && !part_is_decoupled(p)) {
 
         double dt_cool, dt_therm;
         if (with_cosmology) {
@@ -479,8 +481,8 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
       struct part *restrict p = &parts[k];
       struct xpart *restrict xp = &xparts[k];
 
-      /* Only work on active particles */
-      if (part_is_active(p, e)) {
+      /* Only work on active particles that are coupled to the hydro */
+      if (part_is_active(p, e) && !part_is_decoupled(p)) {
 
         /* Is this particle star forming? */
         if (star_formation_is_star_forming(p, xp, sf_props, phys_const, cosmo,
@@ -657,6 +659,16 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
               n_spart_to_create--;
 
             } /* while n_spart_to_create > 0 */
+
+          } else if (wind_should_launch(p, xp, e->wind_props, ti_current,
+                                        dt_star)) {
+
+            /* Launch the particle as a decoupled wind particle */
+            wind_launch(p, xp, e->wind_props, cosmo, e->time, ti_current);
+
+            /* It no longer forms stars */
+            star_formation_update_part_not_SFR(p, xp, e, sf_props,
+                                               with_cosmology);
           }
 
         } else { /* Are we not star-forming? */
@@ -667,7 +679,7 @@ void runner_do_star_formation(struct runner *r, struct cell *c,
 
         } /* Not Star-forming? */
 
-      } else { /* is active? */
+      } else { /* is active and coupled? */
 
         /* Check if the particle is not inhibited */
         if (!part_is_inhibited(p, e)) {
@@ -841,7 +853,7 @@ void runner_do_end_hydro_force(struct runner *r, struct cell *c, int timer) {
       struct xpart *restrict xp = &xparts[k];
 
       double dt = 0;
-      if (part_is_active(p, e)) {
+      if (part_is_active(p, e) && !part_is_decoupled(p)) {
 
         if (with_cosmology) {
           /* Compute the time step. */

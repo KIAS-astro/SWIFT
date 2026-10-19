@@ -33,6 +33,7 @@
 #include "mhd.h"
 #include "rt.h"
 #include "sink.h"
+#include "wind.h"
 #include "star_formation.h"
 #include "stars.h"
 #include "threadpool.h"
@@ -47,6 +48,10 @@
  */
 static INLINE void part_init(struct part *p, struct xpart *xp,
                              const struct engine *e) {
+
+  /* A decoupled wind particle is skipped by the density loop: keep its
+   * density and the derived fields as they were at the launch */
+  if (part_is_decoupled(p)) return;
 
   const int with_cosmology = (e->policy & engine_policy_cosmology);
 

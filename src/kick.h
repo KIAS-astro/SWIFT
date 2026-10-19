@@ -32,6 +32,7 @@
 #include "sink.h"
 #include "stars.h"
 #include "timeline.h"
+#include "wind.h"
 
 /**
  * @brief Compute the time-step length for a gravity kick.
@@ -242,10 +243,15 @@ __attribute__((always_inline)) INLINE static void kick_part(
           dt_kick_mesh_grav);
 #endif
 
+  /* A decoupled wind particle feels gravity only */
+  const int decoupled = part_is_decoupled(p);
+
   /* Kick particles in momentum space (hydro acc.) */
-  xp->v_full[0] += p->a_hydro[0] * dt_kick_hydro;
-  xp->v_full[1] += p->a_hydro[1] * dt_kick_hydro;
-  xp->v_full[2] += p->a_hydro[2] * dt_kick_hydro;
+  if (!decoupled) {
+    xp->v_full[0] += p->a_hydro[0] * dt_kick_hydro;
+    xp->v_full[1] += p->a_hydro[1] * dt_kick_hydro;
+    xp->v_full[2] += p->a_hydro[2] * dt_kick_hydro;
+  }
 
   /* Kick particles in momentum space (grav acc.) */
   if (p->gpart != NULL) {
@@ -277,9 +283,10 @@ __attribute__((always_inline)) INLINE static void kick_part(
    * particle masses */
   chemistry_kick_extra(p, dt_kick_therm, dt_kick_grav, dt_kick_hydro,
                        dt_kick_corr, cosmo, hydro_props, chem_data);
-  hydro_kick_extra(p, xp, dt_kick_therm, dt_kick_grav, dt_kick_mesh_grav,
-                   dt_kick_hydro, dt_kick_corr, cosmo, hydro_props,
-                   floor_props);
+  if (!decoupled)
+    hydro_kick_extra(p, xp, dt_kick_therm, dt_kick_grav, dt_kick_mesh_grav,
+                     dt_kick_hydro, dt_kick_corr, cosmo, hydro_props,
+                     floor_props);
   mhd_kick_extra(p, xp, dt_kick_therm, dt_kick_grav, dt_kick_hydro,
                  dt_kick_corr, cosmo, hydro_props, floor_props);
   if (p->gpart != NULL) gravity_kick_extra(p->gpart, dt_kick_grav);

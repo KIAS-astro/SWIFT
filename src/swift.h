@@ -77,6 +77,8 @@
 #include "power_spectrum.h"
 #include "pressure_floor.h"
 #include "pressure_floor_iact.h"
+#include "wind.h"
+#include "wind_properties.h"
 #include "profiler.h"
 #include "queue.h"
 #include "random.h"

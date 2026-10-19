@@ -40,6 +40,7 @@
 #include "potential.h"
 #include "space.h"
 #include "timeline.h"
+#include "wind.h"
 
 /*! Fields per pixel: gas mass, star mass, star sum m v_z, star sum m v_z^2 */
 #define PRFM_MAP_NFIELD 4
@@ -196,6 +197,8 @@ void prfm_map_build(struct engine *e, const struct prfm_map_params *mp) {
     if (p->time_bin == time_bin_inhibited ||
         p->time_bin == time_bin_not_created)
       continue;
+    /* Decoupled wind particles are not part of the disc */
+    if (part_is_decoupled(p)) continue;
     const double dz = prfm_map_wrap(p->x[2] - c[2], s->dim[2], s->periodic);
     if (fabs(dz) >= mp->half_height) continue;
     const double dx = prfm_map_wrap(p->x[0] - c[0], s->dim[0], s->periodic);

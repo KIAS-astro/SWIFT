@@ -38,6 +38,7 @@
 #include "timestep_limiter.h"
 #include "timestep_sync.h"
 #include "tracers.h"
+#include "wind.h"
 
 /**
  * @brief Initialize the multipoles before the gravity calculation.
@@ -725,10 +726,22 @@ void runner_do_timestep(struct runner *r, struct cell *c, const int timer) {
           old_time_step_length = get_timestep(p->time_bin, e->time_base);
         }
 
+        /* Recouple a decoupled wind particle that has travelled far or long
+         * enough. It rejoins the hydro on the shortest time-step of this
+         * step, so that its neighbours are woken by the limiter. */
+        int recoupled = 0;
+        if (part_is_decoupled(p) &&
+            wind_should_recouple(p, e->wind_props, e->time)) {
+          wind_recouple(p, xp, e->wind_props, cosmo, e->time);
+          recoupled = 1;
+        }
+
         /* Get new time-step */
         integertime_t ti_rt_new_step = get_part_rt_timestep(p, xp, e);
-        const integertime_t ti_new_step =
-            get_part_timestep(p, xp, e, ti_rt_new_step);
+        integertime_t ti_new_step = get_part_timestep(p, xp, e, ti_rt_new_step);
+        if (recoupled)
+          ti_new_step =
+              min(ti_new_step, get_integer_timestep(e->min_active_bin));
         /* Enforce RT time-step size <= hydro step size. */
         ti_rt_new_step = min(ti_new_step, ti_rt_new_step);
 

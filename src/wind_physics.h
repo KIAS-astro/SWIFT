@@ -66,13 +66,31 @@ static inline double wind_clip_Sigma_SFR(const double Sigma_SFR) {
   return fmin(fmax(Sigma_SFR, WIND_SIGMA_SFR_MIN), WIND_SIGMA_SFR_MAX);
 }
 
+/*! Hot-phase fits of K20b Table 5 at |z| = H: log10 of the normalisation
+ * and slope against Sigma_SFR [Msun kpc^-2 yr^-1] */
+#define WIND_TIGRESS_ETA_M_LOG10_NORM -0.86
+#define WIND_TIGRESS_ETA_M_SLOPE -0.07
+#define WIND_TIGRESS_ETA_E_LOG10_NORM -0.70
+#define WIND_TIGRESS_ETA_E_SLOPE 0.14
+
+/**
+ * @brief A loading 10^log10_norm Sigma_SFR^slope, Sigma_SFR clipped to
+ * [1e-4, 1] [Msun kpc^-2 yr^-1].
+ */
+static inline double wind_powerlaw_loading(const double log10_norm,
+                                           const double slope,
+                                           const double Sigma_SFR) {
+  return pow(10., log10_norm) * pow(wind_clip_Sigma_SFR(Sigma_SFR), slope);
+}
+
 /**
  * @brief TIGRESS hot-phase mass loading eta_M (K20b Table 5).
  *
  * @param Sigma_SFR [Msun kpc^-2 yr^-1], clipped to [1e-4, 1].
  */
 static inline double wind_TIGRESS_eta_M(const double Sigma_SFR) {
-  return pow(10., -0.86) * pow(wind_clip_Sigma_SFR(Sigma_SFR), -0.07);
+  return wind_powerlaw_loading(WIND_TIGRESS_ETA_M_LOG10_NORM,
+                               WIND_TIGRESS_ETA_M_SLOPE, Sigma_SFR);
 }
 
 /**
@@ -81,7 +99,8 @@ static inline double wind_TIGRESS_eta_M(const double Sigma_SFR) {
  * @param Sigma_SFR [Msun kpc^-2 yr^-1], clipped to [1e-4, 1].
  */
 static inline double wind_TIGRESS_eta_E(const double Sigma_SFR) {
-  return pow(10., -0.70) * pow(wind_clip_Sigma_SFR(Sigma_SFR), 0.14);
+  return wind_powerlaw_loading(WIND_TIGRESS_ETA_E_LOG10_NORM,
+                               WIND_TIGRESS_ETA_E_SLOPE, Sigma_SFR);
 }
 
 /**

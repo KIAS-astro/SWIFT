@@ -63,6 +63,7 @@
 #include "tools.h"
 #include "units.h"
 #include "version.h"
+#include "wind_io.h"
 #include "xmf.h"
 
 /* The current limit of ROMIO (the underlying MPI-IO layer) is 2GB */
@@ -1035,6 +1036,7 @@ void read_ic_parallel(char *fileName, const struct unit_system *internal_units,
           hydro_read_particles(*parts, list, &num_fields);
           num_fields += mhd_read_particles(*parts, list + num_fields);
           num_fields += chemistry_read_particles(*parts, list + num_fields);
+          num_fields += wind_read_particles(*parts, list + num_fields);
           num_fields += rt_read_particles(*parts, list + num_fields);
         }
         break;

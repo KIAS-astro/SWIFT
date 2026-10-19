@@ -110,6 +110,7 @@ int main(int argc, char *argv[]) {
   struct rt_props rt_properties;
   struct entropy_floor_properties entropy_floor;
   struct pressure_floor_props pressure_floor_props;
+  struct wind_props wind_properties;
   struct black_holes_props black_holes_properties;
   struct fof_props fof_properties;
   struct lightcone_array_props lightcone_array_properties;
@@ -1172,6 +1173,16 @@ int main(int argc, char *argv[]) {
     else
       bzero(&pressure_floor_props, sizeof(struct pressure_floor_props));
 
+    /* Initialise the decoupled wind */
+#ifdef WIND_TIGRESS
+    if (with_cosmology)
+      error("The decoupled wind (--with-wind=TIGRESS) is not cosmological.");
+#endif
+    if (with_hydro)
+      wind_props_init(&wind_properties, &prog_const, &us, params);
+    else
+      bzero(&wind_properties, sizeof(struct wind_props));
+
     /* Initialise the stars properties */
     if (with_stars)
       stars_props_init(&stars_properties, &prog_const, &us, params,
@@ -1606,6 +1617,7 @@ int main(int argc, char *argv[]) {
                 &mesh, &pow_data, &potential, &forcing_terms, &cooling_func,
                 &starform, &chemistry, &extra_io_props, &fof_properties,
                 &los_properties, &lightcone_array_properties, &ics_metadata);
+    e.wind_props = &wind_properties;
     engine_config(/*restart=*/0, /*fof=*/0, &e, params, nr_nodes, myrank,
                   nr_threads, nr_pool_threads, with_aff, talking, restart_dir,
                   restart_file, &reparttype);

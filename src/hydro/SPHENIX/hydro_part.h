@@ -42,6 +42,7 @@
 #include "star_formation_struct.h"
 #include "timestep_limiter_struct.h"
 #include "tracers_struct.h"
+#include "wind_struct.h"
 
 /**
  * @brief Particle fields not needed during the SPH loops over neighbours.
@@ -259,6 +260,9 @@ struct part {
 
   /*! Time-step limiter information */
   struct timestep_limiter_data limiter_data;
+
+  /*! Decoupled-wind data */
+  struct wind_part_data wind_data;
 
 #ifdef SWIFT_DEBUG_CHECKS
 

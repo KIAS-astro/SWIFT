@@ -87,6 +87,7 @@ void DOPAIR1_NAIVE(struct runner *r, struct cell *restrict ci,
 
     /* Skip inhibited particles. */
     if (part_is_inhibited(pi, e)) continue;
+    if (part_is_decoupled(pi)) continue;
 
     const int pi_active = part_is_starting(pi, e);
     const char depth_i = pi->depth_h;
@@ -105,6 +106,7 @@ void DOPAIR1_NAIVE(struct runner *r, struct cell *restrict ci,
 
       /* Skip inhibited particles. */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       const float hj = pj->h;
       const float hjg2 = hj * hj * kernel_gamma2;
@@ -202,6 +204,7 @@ void DOSELF1_NAIVE(struct runner *r, const struct cell *c,
 
     /* Skip inhibited particles. */
     if (part_is_inhibited(pi, e)) continue;
+    if (part_is_decoupled(pi)) continue;
 
     const int pi_active = part_is_starting(pi, e);
     const char depth_i = pi->depth_h;
@@ -219,6 +222,7 @@ void DOSELF1_NAIVE(struct runner *r, const struct cell *c,
 
       /* Skip inhibited particles. */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       const float hj = pj->h;
       const float hjg2 = hj * hj * kernel_gamma2;
@@ -358,6 +362,7 @@ void DOPAIR1(struct runner *r, const struct cell *restrict ci,
 
       /* Skip inactive particles */
       if (!part_is_starting(pi, e)) continue;
+      if (part_is_decoupled(pi)) continue;
 
 #ifdef SWIFT_DEBUG_CHECKS
       if (hi > ci->hydro.h_max_active)
@@ -386,6 +391,7 @@ void DOPAIR1(struct runner *r, const struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         const float hj = pj->h;
         const float pjx = pj->x[0] - cj->loc[0];
@@ -457,6 +463,7 @@ void DOPAIR1(struct runner *r, const struct cell *restrict ci,
 
       /* Skip inactive particles */
       if (!part_is_starting(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
 #ifdef SWIFT_DEBUG_CHECKS
       if (hj > cj->hydro.h_max_active)
@@ -485,6 +492,7 @@ void DOPAIR1(struct runner *r, const struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pi, e)) continue;
+        if (part_is_decoupled(pi)) continue;
 
         const float hi = pi->h;
         const float pix = pi->x[0] - (cj->loc[0] + shift[0]);
@@ -650,6 +658,7 @@ void DOSELF1(struct runner *r, const struct cell *c, const int limit_min_h,
 
     /* Skip inhibited particles. */
     if (part_is_inhibited(pi, e)) continue;
+    if (part_is_decoupled(pi)) continue;
 
     /* Get the particle position and (square of) search radius. */
     const double pix[3] = {pi->x[0], pi->x[1], pi->x[2]};
@@ -668,6 +677,7 @@ void DOSELF1(struct runner *r, const struct cell *c, const int limit_min_h,
 
         /* Get a pointer to the jth particle. (by construction pi != pj) */
         struct part *restrict pj = &parts[indt[pjd]];
+        if (part_is_decoupled(pj)) continue;
 
         /* This particle's (square of) search radius. */
         const float hj = pj->h;
@@ -719,6 +729,7 @@ void DOSELF1(struct runner *r, const struct cell *c, const int limit_min_h,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         /* This particle's (square of) search radius. */
         const float hj = pj->h;

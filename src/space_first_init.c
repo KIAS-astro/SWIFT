@@ -40,6 +40,7 @@
 #include "stars.h"
 #include "threadpool.h"
 #include "tracers.h"
+#include "wind.h"
 
 void space_first_init_parts_mapper(void *restrict map_data, int count,
                                    void *restrict extra_data) {
@@ -146,6 +147,9 @@ void space_first_init_parts_mapper(void *restrict map_data, int count,
     /* And the radiative transfer */
     rt_first_init_timestep_data(&p[k]);
     rt_first_init_part(&p[k], cosmo, rt_props);
+
+    /* And the decoupled wind */
+    wind_first_init_part(&p[k], &xp[k], s->e->wind_props, s->e->time);
 
 #ifdef SWIFT_DEBUG_CHECKS
     /* Check part->gpart->part linkeage. */

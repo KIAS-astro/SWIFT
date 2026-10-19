@@ -40,6 +40,7 @@
 #include "rt.h"
 #include "sink.h"
 #include "stars.h"
+#include "wind.h"
 
 /**
  * @brief Perform the 'drift' operation on a #gpart.
@@ -182,9 +183,12 @@ __attribute__((always_inline)) INLINE static void drift_part(
     p->v[2] += xp->a_grav[2] * dt_kick_grav;
   }
 
-  /* Predict the values of the extra fields */
-  hydro_predict_extra(p, xp, dt_drift, dt_therm, dt_kick_grav, cosmo,
-                      hydro_props, entropy_floor, pressure_floor);
+  /* Predict the values of the extra fields (not for decoupled wind
+   * particles, which keep their internal energy and smoothing length) */
+  if (!part_is_decoupled(p))
+    hydro_predict_extra(p, xp, dt_drift, dt_therm, dt_kick_grav, cosmo,
+                        hydro_props, entropy_floor, pressure_floor);
+  wind_drift_part(p, xp, dt_drift);
   mhd_predict_extra(p, xp, dt_drift, dt_therm, cosmo, hydro_props,
                     entropy_floor);
   chemistry_predict_extra(p, xp, dt_drift, dt_therm, cosmo, e->chemistry);

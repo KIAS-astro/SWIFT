@@ -29,6 +29,7 @@
 #include "potential.h"
 #include "rt.h"
 #include "timeline.h"
+#include "wind.h"
 
 /**
  * @brief Compute a valid integer time-step form a given time-step
@@ -142,6 +143,28 @@ __attribute__((always_inline)) INLINE static integertime_t get_gpart_timestep(
 __attribute__((always_inline)) INLINE static integertime_t get_part_timestep(
     const struct part *restrict p, const struct xpart *restrict xp,
     const struct engine *restrict e, const integertime_t new_dti_rt) {
+
+  /* A decoupled wind particle: gravity and the wind cap only */
+  if (part_is_decoupled(p)) {
+    float new_dt = wind_timestep(e->wind_props);
+    if (p->gpart != NULL) {
+      if (e->policy & engine_policy_external_gravity)
+        new_dt = min(new_dt, external_gravity_timestep(
+                                 e->time, e->external_potential,
+                                 e->physical_constants, p->gpart));
+      if (e->policy & engine_policy_self_gravity)
+        new_dt = min(new_dt, gravity_compute_timestep_self(
+                                 p->gpart, p->a_hydro, e->gravity_properties,
+                                 e->cosmology));
+    }
+    new_dt *= e->cosmology->time_step_factor;
+    new_dt = min(new_dt, e->dt_max);
+    if (new_dt < e->dt_min)
+      error("decoupled part (id=%lld) wants a time-step (%e) below dt_min (%e)",
+            p->id, new_dt, e->dt_min);
+    return make_integer_timestep(new_dt, p->time_bin, num_time_bins,
+                                 e->ti_current, e->time_base_inv);
+  }
 
   /* Compute the next timestep (hydro condition) */
   const float new_dt_hydro =

@@ -85,6 +85,7 @@ void DOSELF1_BH(struct runner *r, struct cell *c, int timer) {
 
         /* Early abort? */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         /* Compute the pairwise distance. */
         const float pjx[3] = {(float)(pj->x[0] - c->loc[0]),
@@ -255,6 +256,7 @@ void DO_NONSYM_PAIR1_BH_NAIVE(struct runner *r, struct cell *restrict ci,
 
         /* Skip inhibited particles. */
         if (part_is_inhibited(pj, e)) continue;
+        if (part_is_decoupled(pj)) continue;
 
         /* Compute the pairwise distance. */
         const float pjx[3] = {(float)(pj->x[0] - cj->loc[0]),
@@ -438,6 +440,7 @@ void DOPAIR1_SUBSET_BH_NAIVE(struct runner *r, struct cell *restrict ci,
 
       /* Skip inhibited particles */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       const double pjx = pj->x[0];
       const double pjy = pj->x[1];
@@ -527,6 +530,7 @@ void DOSELF1_SUBSET_BH(struct runner *r, struct cell *restrict ci,
 
       /* Early abort? */
       if (part_is_inhibited(pj, e)) continue;
+      if (part_is_decoupled(pj)) continue;
 
       /* Compute the pairwise distance. */
       const float pjx[3] = {(float)(pj->x[0] - ci->loc[0]),

@@ -41,6 +41,7 @@
 #include "timers.h"
 #include "timestep_limiter.h"
 #include "tracers.h"
+#include "wind.h"
 
 /* Import the density loop functions. */
 #define FUNCTION density
@@ -1046,7 +1047,7 @@ void runner_do_extra_ghost(struct runner *r, struct cell *c, int timer) {
       struct part *restrict p = &parts[i];
       struct xpart *restrict xp = &xparts[i];
 
-      if (part_is_active(p, e)) {
+      if (part_is_active(p, e) && !part_is_decoupled(p)) {
 
         /* Finish the gradient calculation */
         hydro_end_gradient(p);
@@ -1175,7 +1176,7 @@ void runner_do_ghost(struct runner *r, struct cell *c, const int offset,
     if ((right = (float *)malloc(sizeof(float) * c->hydro.count)) == NULL)
       error("Can't allocate memory for right.");
     for (int k = offset; k < c->hydro.count; k += ntasks)
-      if (part_is_active(&parts[k], e)) {
+      if (part_is_active(&parts[k], e) && !part_is_decoupled(&parts[k])) {
         pid[count] = k;
         h_0[count] = parts[k].h;
         left[count] = 0.f;
@@ -1610,7 +1611,8 @@ void runner_do_ghost(struct runner *r, struct cell *c, const int offset,
 
       if (h > c->hydro.h_max)
         error("Particle has h larger than h_max (id=%lld)", p->id);
-      if (part_is_active(p, e) && h > c->hydro.h_max_active)
+      if (part_is_active(p, e) && !part_is_decoupled(p) &&
+          h > c->hydro.h_max_active)
         error("Active particle has h larger than h_max_active (id=%lld)",
               p->id);
     }

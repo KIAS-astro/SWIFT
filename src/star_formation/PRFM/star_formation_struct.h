@@ -32,6 +32,10 @@ struct star_formation_xpart_data {
   /*! Star formation rate (internal units) or (if negative) time/scale-factor of
    * last SF episode */
   float SFR;
+
+  /*! Star formation surface density W / Upsilon_tot [Msun kpc^-2 yr^-1] at
+   * the last SFR computation (the wind loadings are functions of it) */
+  float Sigma_SFR;
 };
 
 /**

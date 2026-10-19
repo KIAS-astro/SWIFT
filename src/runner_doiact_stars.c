@@ -33,6 +33,7 @@
 #include "space_getsid.h"
 #include "stars.h"
 #include "timers.h"
+#include "wind.h"
 
 /* Import the stars density loop functions. */
 #define FUNCTION density

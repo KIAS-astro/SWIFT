@@ -48,10 +48,12 @@ BUILDS = {"tk": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE", "--with-trace
 # 2.6e7 Msun by swift-ism-model tests/isolated_galaxy/make_ics.py; 0.8 and
 # 1.7 kpc), or H12_m1.6e6 / H12_m1.3e7, the two reference resolutions (HR5/8 and
 # HR5, Lee et al. 2021: baryon mass 1.6e6 and 1.3e7 Msun; 0.5 and 1.0 kpc, HR5 has
-# 1 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names.
+# 1 kpc); SWIFT_REG_ISOGAL_RUNS = comma-separated names. A suffix _cgm (H12_m1.6e6_cgm)
+# selects the same disc inside a hydrostatic hot CGM, made by swift-ism-model
+# tests/isolated_galaxy/add_cgm.py.
 RES = os.environ.get("SWIFT_REG_ISOGAL_RES", "M6")
 SOFTENING = {"M5": 0.2, "M6": 0.4, "H12_m3e6": 0.8, "H12_m3e7": 1.7,
-             "H12_m1.6e6": 0.5, "H12_m1.3e7": 1.0}[RES]
+             "H12_m1.6e6": 0.5, "H12_m1.3e7": 1.0}[RES.replace("_cgm", "")]
 IC_NAME = f"{RES}_disk.hdf5"
 IC_URL = ("https://virgodb.cosma.dur.ac.uk/swift-webstorage/ICs/IsolatedGalaxies_COLIBRE/"
           + IC_NAME)
@@ -71,6 +73,9 @@ ALL_RUNS = {
     # eta_M = 0.91 f_E (Delta T / 10^7.5 K)^-1 -> Delta T = 10^7.11 K.
     "tigress_heat": {"SNII_f_kinetic": 0.0, "SNII_delta_T_K": 10 ** 7.11,
                      "SNII_energy_fraction_min": 0.089, "SNII_energy_fraction_max": 0.089},
+    # no cooling, star formation or feedback: tests that the ICs (disc and CGM) are
+    # in equilibrium
+    "adiabatic": {},
     # baseline without supernova energy (SNIa feedback off as well)
     "nofb": {"SNII_energy_fraction_min": 0.0, "SNII_energy_fraction_max": 0.0,
              "use_SNIa_feedback": 0},
@@ -112,8 +117,10 @@ def run(ctx):
             "SNII_delta_T_K": 10 ** 7.5, "SNII_delta_v_km_p_s": 50.0,
             "SNII_sampled_delay": 1})
         p["EAGLEFeedback"].update(fb)
-        ctx.swift(p, ["--hydro", "--self-gravity", "--external-gravity", "--stars",
-                      "--star-formation", "--cooling", "--feedback", "--limiter", "--sync"],
+        physics = ([] if name == "adiabatic" else
+                   ["--star-formation", "--cooling", "--feedback"])
+        ctx.swift(p, ["--hydro", "--self-gravity", "--external-gravity", "--stars"]
+                  + physics + ["--limiter", "--sync"],
                   subdir=name, name=name, timeout=6 * 3600)
 
 

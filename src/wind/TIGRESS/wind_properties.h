@@ -107,6 +107,8 @@ struct wind_global_stats {
    * at recoupling and deposited as heat; recouplings at the apex */
   double n_launch_hot, m_launch_hot, n_launch_warm, m_launch_warm;
   double E_cr_launch, E_cr_release, E_cr_deposit, n_recouple_apex;
+  /* Sum of m / eta_M of the phase over the launches (hot, warm) */
+  double m_over_eta_hot, m_over_eta_warm;
 };
 
 extern struct wind_global_stats wind_global_stats;

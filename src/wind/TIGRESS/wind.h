@@ -299,12 +299,17 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   atomic_add_d(&wind_global_stats.m_launch, m);
   atomic_add_d(&wind_global_stats.E_kin_launch, m * p->wind_data.launch_e_kin);
   atomic_add_d(&wind_global_stats.E_th_launch, m * p->wind_data.launch_e_th);
+  /* A launch at loading eta stands for m / eta of stars in expectation, so
+   * the sum of m / eta over the launches of a phase estimates the stellar
+   * mass formed whatever the spread of Sigma_SFR (a test of the loadings) */
   if (phase == 2) {
     atomic_add_d(&wind_global_stats.n_launch_warm, 1.);
     atomic_add_d(&wind_global_stats.m_launch_warm, m);
+    atomic_add_d(&wind_global_stats.m_over_eta_warm, m / eta_M_warm);
   } else {
     atomic_add_d(&wind_global_stats.n_launch_hot, 1.);
     atomic_add_d(&wind_global_stats.m_launch_hot, m);
+    atomic_add_d(&wind_global_stats.m_over_eta_hot, m / eta_M);
   }
   atomic_add_d(&wind_global_stats.E_cr_launch, E_cr);
 }

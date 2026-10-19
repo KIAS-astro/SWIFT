@@ -291,21 +291,27 @@ void wind_print_stats(const struct engine *e) {
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[2] + s[3],
         s[2] + hydro_gamma * s[3]);
 
-  double q[8] = {wind_global_stats.n_launch_hot,  wind_global_stats.m_launch_hot,
-                 wind_global_stats.n_launch_warm, wind_global_stats.m_launch_warm,
-                 wind_global_stats.E_cr_launch,   wind_global_stats.E_cr_release,
-                 wind_global_stats.E_cr_deposit,  wind_global_stats.n_recouple_apex};
+  double q[10] = {wind_global_stats.n_launch_hot,
+                  wind_global_stats.m_launch_hot,
+                  wind_global_stats.n_launch_warm,
+                  wind_global_stats.m_launch_warm,
+                  wind_global_stats.E_cr_launch,
+                  wind_global_stats.E_cr_release,
+                  wind_global_stats.E_cr_deposit,
+                  wind_global_stats.n_recouple_apex,
+                  wind_global_stats.m_over_eta_hot,
+                  wind_global_stats.m_over_eta_warm};
 #ifdef WITH_MPI
-  double rq[8];
-  MPI_Reduce(q, rq, 8, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  double rq[10];
+  MPI_Reduce(q, rq, 10, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   memcpy(q, rq, sizeof(q));
 #endif
   if (e->nodeID == 0)
     message(
         "Wind phases at t=%.6e: hot N=%.0f M=%.6e; warm N=%.0f M=%.6e; CR "
         "launched=%.17e released=%.17e deposited=%.17e; apex recouplings "
-        "N=%.0f (internal units)",
-        e->time, q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7]);
+        "N=%.0f; sum m/eta hot=%.6e warm=%.6e (internal units)",
+        e->time, q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9]);
 }
 
 #endif /* WIND_TIGRESS */

@@ -8,9 +8,11 @@ per-particle reservoirs into light particles of m_l = m_g / N at tree rebuilds
 Bennett et al. (2025) with R200 = 97.94 kpc, t_0 = 10 Myr, k = 0.25
 (light-particles-design.md Sec. 8). N = SWIFT_REG_ARK_LIGHT_N (default 10, the
 mass-ratio cap). Resolution SWIFT_REG_ARK_RES (default m2e5), runs
-SWIFT_REG_ARK_RUNS (highspec, lowspec; default both), length
+SWIFT_REG_ARK_RUNS (highspec, lowspec, nowind; default the first two), length
 SWIFT_REG_ARK_TEND_MYR (default 1000). The hydro scheme is the build's
-(SWIFT_REG_ARK_HYDRO = sphenix or gizmo-mfm).
+(SWIFT_REG_ARK_HYDRO = sphenix or gizmo-mfm); SWIFT_REG_ARK_MODE=particle runs
+the whole-particle wind with the same build, the baseline for a scheme other
+than the SPHENIX of arkenstone_va. Without light particles only check 1 applies.
 
 Checks (each run):
   1. it reached its end time;
@@ -48,7 +50,11 @@ BUILDS = {"ark": _build}
 N_LIGHT = float(os.environ.get("SWIFT_REG_ARK_LIGHT_N", "10"))
 M_G_MSUN = {"m2e5": 2e5, "m1.6e6": 1.6e6, "m1.3e7": 1.3e7}[va.RES]
 _only = os.environ.get("SWIFT_REG_ARK_RUNS")
-RUNS = [k for k in ("highspec", "lowspec") if not _only or k in _only.split(",")]
+RUNS = [k for k in ("highspec", "lowspec", "nowind") if (k in _only.split(",") if _only
+                                                         else k != "nowind")]
+# SWIFT_REG_ARK_MODE=particle runs the whole-particle wind with the same build
+# (the baseline for a hydro scheme other than the SPHENIX of arkenstone_va)
+MODE = os.environ.get("SWIFT_REG_ARK_MODE", "light")
 
 
 def run(ctx):
@@ -59,8 +65,10 @@ def run(ctx):
         os.makedirs(ctx.path(name), exist_ok=True)
         shutil.copy(ics, ctx.path(name, va.IC_NAME))
         p = va.parameters(ctx.data_dir, va.T_END_MYR, va.DT_SNAP_MYR, va.WINDS[name])
-        p["Wind"].update(light_common.light_params(
-            M_G_MSUN, N_LIGHT, light_R200_kpc=va.R200_KPC, light_rebuild_interval_Myr=1.0))
+        if MODE == "light" and name != "nowind":
+            p["Wind"].update(light_common.light_params(
+                M_G_MSUN, N_LIGHT, light_R200_kpc=va.R200_KPC,
+                light_rebuild_interval_Myr=1.0))
         ctx.swift(p, va.FLAGS, subdir=name, name=name, timeout=48 * 3600)
 
 
@@ -74,6 +82,9 @@ def analyze(ctx):
         checks.append(Check(f"{name}: final time [Myr]", last.time_cgs / units.MYR,
                             va.T_END_MYR, kind="rel", tol=1e-2, source="run completed"))
         tail = light_common.light_tail(ctx.path(name, f"{name}.log"))
+        if MODE != "light" or name == "nowind":
+            ctx.info[name] = {k: np.asarray(v).tolist() for k, v in res.items()}
+            continue
         if tail is None:
             checks.append(Check(f"{name}: log has a Light totals line", 0, 1, kind="equal"))
             continue

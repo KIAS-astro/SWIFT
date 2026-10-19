@@ -354,18 +354,54 @@ static struct {
 } wind_debug_log[WIND_DEBUG_NLOG];
 static int wind_debug_nlog = 0;
 
+/* isfinite() is folded to 1 under -ffast-math, so test the exponent bits */
+static int wind_debug_bad(const double x) {
+  unsigned long long b;
+  memcpy(&b, &x, sizeof(b));
+  return ((b >> 52) & 0x7ffULL) == 0x7ffULL;
+}
+
 /**
  * @brief DEBUG: after the tasks of a step, every gas and gravity particle must
  * be finite; on failure print the offender and this step's merges.
  */
 void wind_debug_check(struct engine *e) {
   const struct space *s = e->s;
+  int nbad = 0;
+  for (size_t k = 0; k < s->nr_parts; k++) {
+    const struct part *p = &s->parts[k];
+    const struct xpart *xp = &s->xparts[k];
+    if (p->time_bin == time_bin_inhibited ||
+        p->time_bin == time_bin_not_created)
+      continue;
+    if (wind_debug_bad(p->x[0] + p->x[1] + p->x[2]) ||
+        wind_debug_bad((double)xp->v_full[0] + xp->v_full[1] + xp->v_full[2]) ||
+        wind_debug_bad(xp->u_full) || wind_debug_bad(p->h) ||
+        wind_debug_bad(p->rho) || wind_debug_bad(p->mass)) {
+      message(
+          "DEBUG non-finite part after tasks %lld step %d: x %g %g %g v %g %g %g "
+          "u %g h %g rho %g m %g bin %d dec %d launches %d a_hydro %g %g %g",
+          p->id, e->step, p->x[0], p->x[1], p->x[2], xp->v_full[0],
+          xp->v_full[1], xp->v_full[2], xp->u_full, p->h, p->rho, p->mass,
+          p->time_bin, p->wind_data.decoupled, p->wind_data.launch_count,
+          p->a_hydro[0], p->a_hydro[1], p->a_hydro[2]);
+      nbad++;
+      for (int i = 0; i < min(wind_debug_nlog, WIND_DEBUG_NLOG); i++)
+        if (wind_debug_log[i].host == p->id)
+          message("DEBUG  host at step %d: wind %lld bin %d m %g v %g u %g",
+                  wind_debug_log[i].step, wind_debug_log[i].wind,
+                  wind_debug_log[i].bin, wind_debug_log[i].m,
+                  wind_debug_log[i].v, wind_debug_log[i].u);
+    }
+  }
   for (size_t k = 0; k < s->nr_gparts; k++) {
     const struct gpart *g = &s->gparts[k];
     if (g->time_bin == time_bin_inhibited || g->time_bin == time_bin_not_created)
       continue;
-    if (isfinite(g->x[0] + g->x[1] + g->x[2] + g->v_full[0] + g->v_full[1] +
-                 g->v_full[2] + g->a_grav[0] + g->a_grav[1] + g->a_grav[2]))
+    if (!wind_debug_bad(g->x[0] + g->x[1] + g->x[2]) &&
+        !wind_debug_bad((double)g->v_full[0] + g->v_full[1] + g->v_full[2]) &&
+        !wind_debug_bad((double)g->a_grav[0] + g->a_grav[1] + g->a_grav[2]) &&
+        !wind_debug_bad(g->mass))
       continue;
     long long pid = -1;
     if (g->type == swift_type_gas) pid = s->parts[-g->id_or_neg_offset].id;
@@ -382,14 +418,14 @@ void wind_debug_check(struct engine *e) {
               p->rho, p->h, p->a_hydro[0], p->a_hydro[1], p->a_hydro[2],
               p->wind_data.decoupled);
     }
-    for (int i = 0; i < wind_debug_nlog; i++)
-      message("DEBUG  merge %d step %d host %lld wind %lld bin %d m %g v %g u %g h %g",
+    for (int i = 0; i < min(wind_debug_nlog, WIND_DEBUG_NLOG); i++)
+      if (wind_debug_log[i].step >= e->step - 3) message("DEBUG  merge %d step %d host %lld wind %lld bin %d m %g v %g u %g h %g",
               i, wind_debug_log[i].step, wind_debug_log[i].host,
               wind_debug_log[i].wind, wind_debug_log[i].bin, wind_debug_log[i].m,
               wind_debug_log[i].v, wind_debug_log[i].u, wind_debug_log[i].hh);
     error("DEBUG non-finite particle after the tasks of step %d", e->step);
   }
-  wind_debug_nlog = 0;
+  if (nbad) error("DEBUG %d non-finite gas particles after step %d", nbad, e->step);
 }
 
 static void wind_merge_into_host(struct engine *e, struct part *p,
@@ -409,7 +445,8 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     if (n_merge % 200 == 0)
       message("DEBUG merges %lld: host cell not drifted to now %lld, host active %lld",
               n_merge, n_lag, n_active);
-    if (!(uw > 0. && uh > 0. && isfinite(uw) && isfinite(uh)) || h->h <= 0.f)
+    if (!(uw > 0. && uh > 0.) || wind_debug_bad(uw) || wind_debug_bad(uh) ||
+        h->h <= 0.f)
       message("DEBUG bad merge: wind %lld u %g host %lld u %g h %g bin %d", p->id,
               uw, h->id, uh, h->h, h->time_bin);
   }
@@ -423,15 +460,16 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     dv2 += (v[k] - hx->v_full[k]) * (v[k] - hx->v_full[k]);
   }
   const double u = (mw * (uw + ekw) + mh * (uh + ekh)) / m - ek;
-  if (wind_debug_nlog < WIND_DEBUG_NLOG) {
-    wind_debug_log[wind_debug_nlog].host = h->id;
-    wind_debug_log[wind_debug_nlog].wind = p->id;
-    wind_debug_log[wind_debug_nlog].step = e->step;
-    wind_debug_log[wind_debug_nlog].bin = h->time_bin;
-    wind_debug_log[wind_debug_nlog].m = m;
-    wind_debug_log[wind_debug_nlog].v = sqrt(2. * ek);
-    wind_debug_log[wind_debug_nlog].u = u;
-    wind_debug_log[wind_debug_nlog].hh = h->h;
+  {
+    const int i = wind_debug_nlog % WIND_DEBUG_NLOG;
+    wind_debug_log[i].host = h->id;
+    wind_debug_log[i].wind = p->id;
+    wind_debug_log[i].step = e->step;
+    wind_debug_log[i].bin = h->time_bin;
+    wind_debug_log[i].m = m;
+    wind_debug_log[i].v = sqrt(2. * ek);
+    wind_debug_log[i].u = u;
+    wind_debug_log[i].hh = h->h;
     wind_debug_nlog++;
   }
 
@@ -521,10 +559,10 @@ void wind_engine_pass(struct engine *e) {
     if (p->time_bin == time_bin_inhibited ||
         p->time_bin == time_bin_not_created)
       continue;
-    if (!isfinite(p->x[0] + p->x[1] + p->x[2]) ||
-        !isfinite(xp->v_full[0] + xp->v_full[1] + xp->v_full[2]) ||
-        !isfinite(xp->u_full) || !isfinite(p->h) || p->h <= 0.f ||
-        !isfinite(p->rho))
+    if (wind_debug_bad(p->x[0] + p->x[1] + p->x[2]) ||
+        wind_debug_bad((double)xp->v_full[0] + xp->v_full[1] + xp->v_full[2]) ||
+        wind_debug_bad(xp->u_full) || wind_debug_bad(p->h) || p->h <= 0.f ||
+        wind_debug_bad(p->rho) || wind_debug_bad(p->mass))
       error(
           "DEBUG non-finite part %lld step %d: x %g %g %g v %g %g %g u %g h %g "
           "rho %g m %g bin %d dec %d launches %d",

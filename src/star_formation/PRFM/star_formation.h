@@ -46,7 +46,8 @@
  * Kim 2022), in the PRFM-int form of Jeffreson et al. (2026, Sec. 2.6).
  *
  * A gas particle with n_H = rho / (1.4 m_H) >= n_th (or, as an option, an
- * equilibrium density Sigma_g / (2 H_g 1.4 m_H) >= n_th) and with T below
+ * equilibrium density Sigma_g / (2 H_g 1.4 m_H) >= n_th together with a
+ * lower measured n_H >= n_floor, J26 p. 23) and with T below
  * T_max or entropy within a margin of the entropy floor forms stars at
  * mdot = m_g / t_dep, t_dep = Upsilon_tot Sigma_g / W (src/prfm_physics.h).
  * Sigma_g, Sigma_* and sigma_*z come from the face-on map of the isolated
@@ -59,7 +60,8 @@
  */
 enum prfm_star_formation_threshold {
   prfm_threshold_measured,   /*<! n_H from the particle's density */
-  prfm_threshold_equilibrium /*<! n_H,eq = Sigma_g / (2 H_g 1.4 m_H) */
+  prfm_threshold_equilibrium /*<! n_H,eq = Sigma_g / (2 H_g 1.4 m_H), and
+                                  the measured n_H above a lower floor */
 };
 
 /**
@@ -87,6 +89,9 @@ struct star_formation {
 
   /*! Threshold n_th in H atoms per cm^3 */
   double n_th_H_p_cm3;
+
+  /*! With the equilibrium threshold, the lowest measured n_H [cm^-3] */
+  double n_floor_H_p_cm3;
 
   /*! Physical mass density to n_H in cm^-3 (n_H = rho / 1.4 m_H) */
   double rho_to_n_H_cgs;
@@ -196,11 +201,12 @@ INLINE static int star_formation_is_star_forming(
     const struct entropy_floor_properties *entropy_floor_props) {
 
   /* Density threshold */
+  const double n_H =
+      hydro_get_physical_density(p, cosmo) * starform->rho_to_n_H_cgs;
   if (starform->threshold == prfm_threshold_measured) {
-    const double n_H =
-        hydro_get_physical_density(p, cosmo) * starform->rho_to_n_H_cgs;
     if (n_H < starform->n_th_H_p_cm3) return 0;
   } else {
+    if (n_H < starform->n_floor_H_p_cm3) return 0;
     struct prfm_state state;
     if (!star_formation_prfm_state(p, starform, &state, NULL)) return 0;
     /* Sigma_g / (2 H_g) = W / sigma_eff^2 */
@@ -499,6 +505,13 @@ INLINE static void starformation_init_backend(
         thr);
   starform->n_th_H_p_cm3 = parser_get_opt_param_double(
       parameter_file, "PRFMStarFormation:threshold_n_H_p_cm3", 0.13);
+  /* J26 p. 23 gives no value. At 1e7 Msun J26 Fig. 12 finds the measured
+   * density about 1 dex below the equilibrium one, so the default floor sits
+   * 1 dex below n_th = 0.13; it excludes gas far above the plane, whose
+   * column passes the equilibrium cut. */
+  starform->n_floor_H_p_cm3 = parser_get_opt_param_double(
+      parameter_file, "PRFMStarFormation:equilibrium_min_measured_n_H_p_cm3",
+      0.01);
 
   starform->T_max_K = parser_get_opt_param_double(
       parameter_file, "PRFMStarFormation:max_temperature_K", 1e5);
@@ -556,6 +569,9 @@ INLINE static void starformation_print_backend(
       starform->threshold == prfm_threshold_measured ? "measured"
                                                      : "equilibrium",
       starform->T_max_K, starform->entropy_margin_dex);
+  if (starform->threshold == prfm_threshold_equilibrium)
+    message("Equilibrium threshold also requires a measured n_H >= %.3g cm^-3",
+            starform->n_floor_H_p_cm3);
   prfm_map_params_print(&starform->map);
   message("Will form %d stars per gas particle.",
           starform->num_stars_per_gas_particle);

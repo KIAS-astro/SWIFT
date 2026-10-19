@@ -2996,6 +2996,11 @@ int engine_step(struct engine *e) {
     prfm_map_build(e, &e->star_formation->map);
 #endif
 
+#ifdef WIND_TIGRESS
+  /* Ambient pressure for the pressure recoupling of decoupled winds */
+  wind_ambient_build(e);
+#endif
+
   /* Start all the tasks. */
   TIMER_TIC;
   engine_launch(e, "tasks");

@@ -62,11 +62,28 @@ struct wind_part_data {
   /*! Recoupling distance of this launch: max(d_rec, factor kernel_gamma h) */
   float d_rec;
 
+  /*! Minimum distance for pressure recoupling of this launch */
+  float d_min;
+
+  /*! Subgrid CC85 wind of this launch: source radius, mass injection rate,
+   * asymptotic speed */
+  float cc85_R, cc85_Mdot, cc85_v_inf;
+
+  /*! CC85 and ambient pressures at the last recoupling */
+  float recouple_P_w, recouple_P_amb;
+
+  /*! Sigma_SFR [Msun kpc^-2 yr^-1] and the loadings used at the last
+   * launch */
+  float launch_Sigma_SFR, launch_eta_M, launch_eta_E;
+
   /*! Number of launches of this particle */
   int launch_count;
 
   /*! 1 while the particle is decoupled from the hydrodynamics */
   char decoupled;
+
+  /*! Why the particle last recoupled (enum wind_recoupling_reason) */
+  char recouple_reason;
 };
 
 #endif /* SWIFT_WIND_TIGRESS_STRUCT_H */

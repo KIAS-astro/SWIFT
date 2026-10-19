@@ -26,6 +26,7 @@
 
 #include "inline.h"
 #include "wind_physics.h"
+#include "wind_recoupling_physics.h"
 
 #include <stdio.h>
 
@@ -80,6 +81,29 @@ struct wind_props {
 
   /*! Time-step cap while decoupled */
   float dt_max;
+
+  /*! Recoupling criterion: distance (WD5) or CC85 pressure balance */
+  enum wind_recoupling_mode recoupling;
+
+  /*! Loadings multiplied by the K20b height factors at z = d_rec? */
+  int loading_height_recoupling;
+
+  /*! Pressure recoupling: radius R of the subgrid CC85 wind, minimum
+   * distance d_min */
+  double cc85_R, d_min;
+
+  /*! Sigma_SFR [Msun kpc^-2 yr^-1] to internal units */
+  double Sigma_SFR_to_internal;
+
+  /*! One kpc in internal units */
+  double kpc;
+
+  /*! Ambient-pressure profile: centre (relative to the box centre unless
+   * ambient_centre_is_absolute), density above which gas is excluded, log
+   * shells from r_min to r_max */
+  double ambient_centre[3];
+  int ambient_centre_is_absolute;
+  double ambient_rho_max, ambient_r_min, ambient_r_max;
 };
 
 /**
@@ -101,5 +125,7 @@ void wind_props_print(const struct wind_props *props);
 void wind_struct_dump(const struct wind_props *props, FILE *stream);
 void wind_struct_restore(struct wind_props *props, FILE *stream);
 void wind_print_stats(const struct engine *e);
+void wind_ambient_build(struct engine *e);
+double wind_ambient_pressure(const double x[3]);
 
 #endif /* SWIFT_WIND_TIGRESS_PROPERTIES_H */

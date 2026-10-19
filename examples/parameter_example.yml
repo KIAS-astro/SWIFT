@@ -859,6 +859,14 @@ Wind:
   recoupling_kernel_factor:    2.          # (Optional) The recoupling distance is at least this many kernel supports at launch. (Default: 2)
   recoupling_time_Myr:         25.         # (Optional) Recoupling time in Myr. (Default: 25)
   max_timestep_Myr:            1.          # (Optional) Time-step cap while decoupled in Myr. (Default: 1)
+  loading_height:              H           # (Optional) H (K20b fits at |z| = H) or recoupling (loadings times eta(z = d_rec) / eta(H) from the K20b 500 pc and 1 kpc hot-phase fits; needs recoupling distance). (Default: H)
+  recoupling:                  distance    # (Optional) distance (at recoupling_distance_kpc or recoupling_time_Myr) or pressure (where the particle's subgrid CC85 wind pressure falls to the ambient pressure; distance and time are then backstops). (Default: distance)
+  cc85_launch_radius_kpc:      0.5         # (Optional) Source radius R of the subgrid CC85 wind; Mdot = eta_M Sigma_SFR pi R^2. (Default: PRFMStarFormation:cylinder_radius_kpc, else 0.5)
+  recoupling_min_distance_kpc: 1.          # (Optional) Pressure recoupling only beyond this distance (and the kernel factor). (Default: 1)
+  ambient_max_nH_cm3:          0.1         # (Optional) Gas denser than this is left out of the ambient pressure. (Default: 0.1)
+  ambient_centre:              [0, 0, 0]   # (Optional) Centre of the ambient-pressure shells, relative to the box centre. (Default: [0, 0, 0])
+  ambient_centre_is_absolute:  0           # (Optional) Is ambient_centre an absolute position? (Default: 0)
+  ambient_max_radius_kpc:      1000.       # (Optional) Outer radius of the 128 log shells (inner 0.1 kpc). (Default: 1000)
 
 # AGORA feedback model
 AGORAFeedback:

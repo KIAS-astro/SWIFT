@@ -36,7 +36,12 @@ INLINE static int wind_read_particles(struct part *parts,
                                       struct io_props *list) {
   list[0] = io_make_input_field("WindDecoupled", CHAR, 1, OPTIONAL,
                                 UNIT_CONV_NO_UNITS, parts, wind_data.decoupled);
-  return 1;
+  list[1] = io_make_input_field("WindCC85Radii", FLOAT, 1, OPTIONAL,
+                                UNIT_CONV_LENGTH, parts, wind_data.cc85_R);
+  list[2] = io_make_input_field("WindCC85MassRates", FLOAT, 1, OPTIONAL,
+                                UNIT_CONV_MASS_PER_UNIT_TIME, parts,
+                                wind_data.cc85_Mdot);
+  return 3;
 }
 
 /**
@@ -97,7 +102,49 @@ INLINE static int wind_write_particles(const struct part *parts,
       parts, wind_data.d_rec,
       "Recoupling distance of the last launch, max(d_rec, factor x kernel "
       "support at launch)");
-  return 12;
+  list[12] = io_make_output_field(
+      "WindRecouplingReasons", CHAR, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.recouple_reason,
+      "Why the particle last recoupled: 0 never, 1 distance, 2 time, 3 "
+      "pressure balance");
+  list[13] = io_make_output_field(
+      "WindRecouplingWindPressures", FLOAT, 1, UNIT_CONV_PRESSURE, 0.f, parts,
+      wind_data.recouple_P_w,
+      "Pressure of the subgrid CC85 wind at the last recoupling (0 in "
+      "distance mode, -1 if never recoupled)");
+  list[14] = io_make_output_field(
+      "WindRecouplingAmbientPressures", FLOAT, 1, UNIT_CONV_PRESSURE, 0.f,
+      parts, wind_data.recouple_P_amb,
+      "Ambient pressure at the last recoupling (0 in distance mode, -1 if "
+      "never recoupled)");
+  list[15] = io_make_output_field("WindCC85Radii", FLOAT, 1, UNIT_CONV_LENGTH,
+                                  1.f, parts, wind_data.cc85_R,
+                                  "Source radius of the subgrid CC85 wind of "
+                                  "the last launch");
+  list[16] = io_make_output_field(
+      "WindCC85MassRates", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_TIME, 0.f, parts,
+      wind_data.cc85_Mdot,
+      "Mass injection rate of the subgrid CC85 wind of the last launch");
+  list[17] = io_make_output_field(
+      "WindCC85Speeds", FLOAT, 1, UNIT_CONV_VELOCITY, 0.f, parts,
+      wind_data.cc85_v_inf,
+      "Asymptotic speed of the subgrid CC85 wind of the last launch");
+  list[18] = io_make_output_field(
+      "WindRecouplingMinDistances", FLOAT, 1, UNIT_CONV_LENGTH, 1.f, parts,
+      wind_data.d_min,
+      "Minimum distance for pressure recoupling of the last launch");
+  list[19] = io_make_output_field(
+      "WindLaunchSigmaSFR", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.launch_Sigma_SFR,
+      "PRFM Sigma_SFR at the last launch in Msun kpc^-2 yr^-1 (-1 if never "
+      "launched)");
+  list[20] = io_make_output_field(
+      "WindLaunchMassLoadings", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.launch_eta_M, "eta_M used at the last launch");
+  list[21] = io_make_output_field(
+      "WindLaunchEnergyLoadings", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.launch_eta_E, "eta_E used at the last launch");
+  return 22;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

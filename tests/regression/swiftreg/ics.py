@@ -18,13 +18,19 @@ def lattice(n, box_size):
     return np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
 
 
-def glass_positions(glass_file, box_size):
-    """Positions of a SWIFT glass (unit box) scaled to box_size."""
+def glass_positions(glass_file, box_size, tile=1):
+    """Positions of a SWIFT glass (unit box), repeated tile^3 times (a periodic
+    glass tiles without seams), scaled to box_size."""
     with h5py.File(glass_file, "r") as f:
-        return f["PartType0/Coordinates"][:, :] * box_size
+        g = f["PartType0/Coordinates"][:, :]
+    shifts = np.array([(i, j, k) for i in range(tile) for j in range(tile)
+                       for k in range(tile)], dtype=float)
+    pos = (g[None, :, :] + shifts[:, None, :]).reshape(-1, 3) / tile
+    return pos * box_size
 
 
-def uniform_gas(n, box_size_kpc, nH_cgs, T, mu=units.MU_NEUTRAL, glass_file=None):
+def uniform_gas(n, box_size_kpc, nH_cgs, T, mu=units.MU_NEUTRAL, glass_file=None,
+                glass_tile=1):
     """Gas fields for a uniform periodic box on an n^3 lattice.
 
     With glass_file, positions come from that glass (n is then ignored) instead
@@ -33,7 +39,8 @@ def uniform_gas(n, box_size_kpc, nH_cgs, T, mu=units.MU_NEUTRAL, glass_file=None
     gas particle mass in solar masses.
     """
     rho = units.rho_from_nH(nH_cgs) / units.UNIT_DENSITY
-    pos = glass_positions(glass_file, box_size_kpc) if glass_file else lattice(n, box_size_kpc)
+    pos = (glass_positions(glass_file, box_size_kpc, glass_tile) if glass_file
+           else lattice(n, box_size_kpc))
     npart = len(pos)
     mass = rho * box_size_kpc ** 3 / npart
     u = units.u_from_T(T, mu) / units.UNIT_ENERGY_PER_MASS

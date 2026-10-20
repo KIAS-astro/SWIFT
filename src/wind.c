@@ -350,7 +350,8 @@ static void wind_gather_recurse(struct cell *c, const struct space *s,
 static struct {
   long long host, wind;
   int step, bin;
-  double m, v, u, hh;
+  double m, v, u, hh, u0, rho0, f0, vsig0, alpha0;
+  int mab;
 } wind_debug_log[WIND_DEBUG_NLOG];
 static int wind_debug_nlog = 0;
 
@@ -385,13 +386,28 @@ void wind_debug_check(struct engine *e) {
           xp->v_full[1], xp->v_full[2], xp->u_full, p->h, p->rho, p->mass,
           p->time_bin, p->wind_data.decoupled, p->wind_data.launch_count,
           p->a_hydro[0], p->a_hydro[1], p->a_hydro[2]);
+      message(
+          "DEBUG  force: p->u %g u_dt %g f %g P %g cs %g balsara %g alpha %g "
+          "v_sig %g div_v %g div_v_prev %g alpha_diff %g laplace_u %g wcount %g "
+          "wcount_dh %g rho_dh %g alpha_max_ngb %g max_active_bin %d wakeup %d sync %d",
+          p->u, p->u_dt, p->force.f, p->force.pressure, p->force.soundspeed,
+          p->force.balsara, p->viscosity.alpha, p->viscosity.v_sig,
+          p->viscosity.div_v, p->viscosity.div_v_previous_step,
+          p->diffusion.alpha, p->diffusion.laplace_u, p->density.wcount,
+          p->density.wcount_dh, p->density.rho_dh, p->force.alpha_visc_max_ngb,
+          e->max_active_bin, p->limiter_data.wakeup,
+          p->limiter_data.to_be_synchronized);
       nbad++;
       for (int i = 0; i < min(wind_debug_nlog, WIND_DEBUG_NLOG); i++)
         if (wind_debug_log[i].host == p->id)
-          message("DEBUG  host at step %d: wind %lld bin %d m %g v %g u %g",
+          message("DEBUG  host at step %d: wind %lld bin %d m %g v %g u %g; before: "
+                  "u %g rho %g h %g f %g v_sig %g alpha %g max_active_bin %d",
                   wind_debug_log[i].step, wind_debug_log[i].wind,
                   wind_debug_log[i].bin, wind_debug_log[i].m,
-                  wind_debug_log[i].v, wind_debug_log[i].u);
+                  wind_debug_log[i].v, wind_debug_log[i].u, wind_debug_log[i].u0,
+                  wind_debug_log[i].rho0, wind_debug_log[i].hh,
+                  wind_debug_log[i].f0, wind_debug_log[i].vsig0,
+                  wind_debug_log[i].alpha0, wind_debug_log[i].mab);
     }
   }
   for (size_t k = 0; k < s->nr_gparts; k++) {
@@ -470,6 +486,12 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     wind_debug_log[i].v = sqrt(2. * ek);
     wind_debug_log[i].u = u;
     wind_debug_log[i].hh = h->h;
+    wind_debug_log[i].u0 = uh;
+    wind_debug_log[i].rho0 = h->rho;
+    wind_debug_log[i].f0 = h->force.f;
+    wind_debug_log[i].vsig0 = h->viscosity.v_sig;
+    wind_debug_log[i].alpha0 = h->viscosity.alpha;
+    wind_debug_log[i].mab = e->max_active_bin;
     wind_debug_nlog++;
   }
 

@@ -3003,7 +3003,9 @@ int engine_step(struct engine *e) {
   TIMER_TIC;
   engine_launch(e, "tasks");
   TIMER_TOC(timer_runners);
+#ifdef WIND_TIGRESS
   if (e->policy & engine_policy_hydro) wind_debug_check(e);
+#endif
 
   /* When running over MPI, synchronize top-level cells */
 #ifdef WITH_MPI

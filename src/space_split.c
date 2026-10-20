@@ -195,6 +195,7 @@ void space_split_recursive(struct space *s, struct cell *c,
           k, gp->x[0], gp->x[1], gp->x[2], gp->mass, gp->type, gp->time_bin,
           gp->id_or_neg_offset, gp->v_full[0], gp->v_full[1], gp->v_full[2]);
     }
+#ifdef WIND_TIGRESS
     for (int k = 0; k < count && k < 30; k++) {
       const struct part *p = &parts[k];
       message(
@@ -204,6 +205,7 @@ void space_split_recursive(struct space *s, struct cell *c,
           p->wind_data.decoupled, p->wind_data.launch_count,
           p->wind_data.recouple_pending, p->wind_data.rho_ambient);
     }
+#endif
     error(
         "Exceeded maximum depth (%d) when splitting cells, aborting. This is "
         "most likely due to having too many particles at the exact same "

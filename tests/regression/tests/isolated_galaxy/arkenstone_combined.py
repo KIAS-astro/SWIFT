@@ -35,11 +35,15 @@ Checks (each run):
      stellar mass formed within 3 sigma (arkenstone_twophase.wind_checks);
   3. hot particles recoupled by the last snapshot: distance >= the recoupling
      threshold (1 - 1e-6) or flight time >= 50 Myr (minus one 1 Myr step);
-  4. K20a PDF runs, over the warm particles' last launches: mean launch energy per
-     mass against the mean of 3 v0^2 + v_c^2/2 + gamma u at the recorded
-     Sigma_SFR within 3 standard errors (sd 21^1/2 v0^2), and the kicks against
-     the target distribution (KS of the probability integral transform,
-     D sqrt(N) < 1.949).
+  3a. hot particles recoupled by distance overshoot the threshold by at most
+     0.02 of it (Wind:recoupling_overshoot_fraction) plus 1e-3 for the speed
+     change within a step;
+  4. K20a PDF runs: launched warm energy over all launches (log) against the sum
+     of the per-launch expectations, within 3 sigma of the summed variance (with
+     at least 100 launches, for the normal approximation to hold). The
+     kick distribution itself is tested in wind/combined_launch, not here:
+     snapshot records over-represent fast kicks (slow particles fall back and
+     relaunch or form stars).
 """
 
 import os
@@ -53,7 +57,7 @@ from swiftreg.snapshot import snapshots
 
 from . import arkenstone_va as va
 from . import arkenstone_twophase as ark2
-from ..wind import combined_launch as cl
+from ..wind import _twophase as tp
 
 DESCRIPTION = "Arkenstone I galaxy with the combined wind: hot at 10 kpc plus warm (fixed or K20a PDF)"
 TIER = "long"
@@ -66,6 +70,7 @@ V0, V_CLIMB = 60.0, 60.5  # km/s
 # the K20a PDF: log10(3.8) + 0.44 log10(3.6e-3)
 WARM_NORM_1KPC = -0.495
 D_REC_HOT, T_REC = 10.0, 50.0  # kpc, Myr
+OVERSHOOT = 0.02  # Wind:recoupling_overshoot_fraction
 GAMMA = 5.0 / 3.0
 U_WARM = units.u_from_T(1e4, 0.6)
 
@@ -98,7 +103,7 @@ def recoupling():
     """Wind parameters of the combined wind beyond the loadings."""
     return dict(recoupling_distance_kpc=D_REC_HOT, recoupling_kernel_factor=2.0,
                 recoupling_time_Myr=T_REC, warm_recoupling_distance_kpc=1.5,
-                max_timestep_Myr=1.0)
+                max_timestep_Myr=1.0, recoupling_overshoot_fraction=OVERSHOOT)
 
 
 def run(ctx):
@@ -113,7 +118,8 @@ def run(ctx):
         ctx.swift(p, va.FLAGS, subdir=name, name=name, timeout=48 * 3600)
 
 
-def combined_checks(ctx, name, w, last, checks, v_climb):
+def combined_checks(ctx, name, w, snaps, checks, v_climb):
+    last = snaps[-1]
     """Checks 3 and 4; shared with isolated_galaxy/combined_cgm."""
     if w.get("loading_model", "none") == "none":
         return
@@ -132,23 +138,25 @@ def combined_checks(ctx, name, w, last, checks, v_climb):
                             int((~ok).sum()), 0, kind="equal",
                             source=f"{int(hot.sum())} recoupled; {int(by_d.sum())} by "
                                    f"distance, median {np.median(d[hot]):.3g} kpc"))
+        if by_d.any():
+            over = float(np.max(d[hot][by_d] / thr[hot][by_d] - 1))
+            checks.append(Check(f"{name}: max hot overshoot / d_rec", over,
+                                OVERSHOOT + 1e-3, kind="max",
+                                source="Wind:recoupling_overshoot_fraction; 1e-3 for the "
+                                       "speed change within a step"))
     if w.get("warm_launch_speed_pdf") == "K20a":
-        warm = (ph == 2) & (last.read(0, "WindLaunchCounts", cgs=False) > 0)
-        v0 = cl.scale(last.read(0, "WindLaunchSigmaSFR", cgs=False)[warm],
-                      w["warm_pdf_v0_kms"], w.get("warm_pdf_slope", cl.PDF_SLOPE),
-                      w.get("warm_pdf_floor_kms", cl.PDF_FLOOR))
-        k = last.read(0, "WindLaunchKicks")[warm] / 1e5
-        n = k.size
-        e = np.mean(0.5 * k ** 2) * 1e10 + GAMMA * U_WARM
-        e_mean = np.mean(3 * v0 ** 2 + 0.5 * v_climb ** 2) * 1e10 + GAMMA * U_WARM
-        checks.append(Check(f"{name}: warm launch energy per mass [(km/s)^2]",
-                            e / 1e10, e_mean / 1e10, kind="sigma", tol=3.0,
-                            sigma=np.sqrt(np.sum(21.0 * v0 ** 4)) / max(n, 1),
-                            source=f"K20a PDF at the launch Sigma_SFR, last launch of "
-                                   f"{n} warm particles"))
-        D = cl.ks_uniform(cl.cdf(k, v0, v_climb))
-        checks.append(Check(f"{name}: warm kicks KS D sqrt(N)", D * np.sqrt(n), 1.949,
-                            kind="max", source="PIT at the launch Sigma_SFR against U(0,1)"))
+        # Every launch enters the log's sums; snapshot records are biased towards
+        # fast kicks, since slow particles fall back and relaunch or form stars
+        tail = tp.phases_tail(ctx.path(name, f"{name}.log"))
+        n = int(tail["n_warm"])
+        if n < 100:  # v^2 is skewed; the normal approximation needs many launches
+            return
+        checks.append(Check(f"{name}: warm launched energy / K20a expectation",
+                            tail["E_launch_warm"] / tail["E_warm_expected"], 1.0,
+                            kind="sigma", tol=3.0,
+                            sigma=np.sqrt(tail["E_warm_variance"]) / tail["E_warm_expected"],
+                            source=f"sum over all {n} warm launches of m (3 v0^2 + "
+                                   "v_c^2/2 + gamma u) at the launch v0 (log)"))
 
 
 def analyze(ctx):
@@ -162,7 +170,7 @@ def analyze(ctx):
         tail = None
         if name != "nowind":
             tail = ark2.wind_checks(ctx, name, WINDS[name], last, checks)
-            combined_checks(ctx, name, WINDS[name], last, checks, V_CLIMB)
+            combined_checks(ctx, name, WINDS[name], snaps, checks, V_CLIMB)
         res, _ = va.series(ctx.path(name))
         ctx.info[name] = {"wind_phases": tail, "seed": SEED,
                           **{k: np.asarray(v).tolist() for k, v in res.items()}}

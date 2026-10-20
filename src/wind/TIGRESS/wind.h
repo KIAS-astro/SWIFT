@@ -238,7 +238,7 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                const integertime_t ti_current,
                                const int phase) {
 
-  double eta_M, eta_E, dv, u_w;
+  double eta_M, eta_E, dv, u_w, v0 = 0.;
   wind_loadings(props, xp, &eta_M, &eta_E);
   const double eta_M_warm = wind_warm_eta_M(props, xp);
   if (phase == 2) {
@@ -247,8 +247,7 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                              random_number_wind_warm_speed_1);
       const double u2 = random_unit_interval(p->id, ti_current,
                                              random_number_wind_warm_speed_2);
-      const double v0 =
-          wind_warm_pdf_scale(props->warm_pdf_v0, props->warm_pdf_slope,
+      v0 = wind_warm_pdf_scale(props->warm_pdf_v0, props->warm_pdf_slope,
                               props->warm_pdf_floor, xp->sf_data.Sigma_SFR);
       dv = wind_warm_pdf_speed(u1, u2, v0, props->warm_climb_v);
     } else {
@@ -322,6 +321,13 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
     atomic_add_d(&wind_global_stats.m_over_eta_warm, m / eta_M_warm);
     atomic_add_d(&wind_global_stats.E_launch_warm, E_kick);
     atomic_add_d(&wind_global_stats.p_launch_warm, m * dv);
+    if (props->warm_speed_pdf) {
+      atomic_add_d(&wind_global_stats.E_launch_warm_expected,
+                   m * (wind_warm_pdf_mean_kinetic(v0, props->warm_climb_v) +
+                        hydro_gamma * u_w));
+      atomic_add_d(&wind_global_stats.E_launch_warm_variance,
+                   m * m * 21. * v0 * v0 * v0 * v0);
+    }
   } else {
     atomic_add_d(&wind_global_stats.n_launch_hot, 1.);
     atomic_add_d(&wind_global_stats.m_launch_hot, m);
@@ -433,10 +439,24 @@ __attribute__((always_inline)) INLINE static void wind_drift_part(
 }
 
 /**
- * @brief Time-step cap of a decoupled particle.
+ * @brief Time-step cap of a decoupled particle: dt_max, and near the
+ * recoupling distance at most max(d_rec - d, f d_rec) / |v|, so that the
+ * particle overshoots d_rec by at most f d_rec (f =
+ * Wind:recoupling_overshoot_fraction; 0 switches the limit off).
  */
-INLINE static float wind_timestep(const struct wind_props *props) {
-  return props->dt_max;
+INLINE static float wind_timestep(const struct wind_props *props,
+                                  const struct part *p,
+                                  const struct xpart *xp) {
+  float dt = props->dt_max;
+  const double f = props->overshoot_fraction;
+  if (f <= 0.) return dt;
+  const double v = sqrt(xp->v_full[0] * xp->v_full[0] +
+                        xp->v_full[1] * xp->v_full[1] +
+                        xp->v_full[2] * xp->v_full[2]);
+  if (v <= 0.) return dt;
+  const double d_rec = p->wind_data.d_rec;
+  const double left = d_rec - wind_recoupling_measure(p, props);
+  return fminf(dt, (float)(fmax(left, f * d_rec) / v));
 }
 
 #endif /* SWIFT_WIND_TIGRESS_H */

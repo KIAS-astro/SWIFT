@@ -146,7 +146,7 @@ __attribute__((always_inline)) INLINE static integertime_t get_part_timestep(
 
   /* A decoupled wind particle: gravity and the wind cap only */
   if (part_is_decoupled(p)) {
-    float new_dt = wind_timestep(e->wind_props);
+    float new_dt = wind_timestep(e->wind_props, p, xp);
     if (p->gpart != NULL) {
       if (e->policy & engine_policy_external_gravity)
         new_dt = min(new_dt, external_gravity_timestep(

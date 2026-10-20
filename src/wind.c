@@ -157,6 +157,8 @@ void wind_props_init(struct wind_props *props,
       Myr;
   props->dt_max =
       parser_get_opt_param_double(params, "Wind:max_timestep_Myr", 1.) * Myr;
+  props->overshoot_fraction = parser_get_opt_param_double(
+      params, "Wind:recoupling_overshoot_fraction", 0.02);
 
   /* Warm channel: loading, kick, temperature (mu = 0.6), recoupling */
   props->warm_eta_M =
@@ -254,6 +256,9 @@ void wind_props_print(const struct wind_props *props) {
       "Wind: recoupling at d = max(%.4g, %.3g kernel supports at launch) or "
       "t = %.4g (internal units); time-step cap %.4g",
       props->d_rec, props->d_rec_kernel_factor, props->t_rec, props->dt_max);
+  message("Wind: decoupled steps overshoot the recoupling distance by at most "
+          "%.3g of it",
+          props->overshoot_fraction);
   if (props->warm_phase) {
     if (props->warm_eta_M > 0.)
       message("Wind: warm phase, eta_M,warm = %.4g", props->warm_eta_M);
@@ -322,7 +327,7 @@ void wind_print_stats(const struct engine *e) {
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[2] + s[3],
         s[2] + hydro_gamma * s[3]);
 
-  double q[14] = {wind_global_stats.n_launch_hot,
+  double q[16] = {wind_global_stats.n_launch_hot,
                   wind_global_stats.m_launch_hot,
                   wind_global_stats.n_launch_warm,
                   wind_global_stats.m_launch_warm,
@@ -335,10 +340,12 @@ void wind_print_stats(const struct engine *e) {
                   wind_global_stats.E_launch_hot,
                   wind_global_stats.E_launch_warm,
                   wind_global_stats.p_launch_hot,
-                  wind_global_stats.p_launch_warm};
+                  wind_global_stats.p_launch_warm,
+                  wind_global_stats.E_launch_warm_expected,
+                  wind_global_stats.E_launch_warm_variance};
 #ifdef WITH_MPI
-  double rq[14];
-  MPI_Reduce(q, rq, 14, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  double rq[16];
+  MPI_Reduce(q, rq, 16, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   memcpy(q, rq, sizeof(q));
 #endif
   if (e->nodeID == 0)
@@ -346,9 +353,10 @@ void wind_print_stats(const struct engine *e) {
         "Wind phases at t=%.6e: hot N=%.0f M=%.6e; warm N=%.0f M=%.6e; CR "
         "launched=%.17e released=%.17e deposited=%.17e; apex recouplings "
         "N=%.0f; sum m/eta hot=%.6e warm=%.6e; launched energy hot=%.10e "
-        "warm=%.10e; momentum hot=%.10e warm=%.10e (internal units)",
+        "warm=%.10e; momentum hot=%.10e warm=%.10e; warm K20a expected "
+        "energy=%.10e variance=%.10e (internal units)",
         e->time, q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9],
-        q[10], q[11], q[12], q[13]);
+        q[10], q[11], q[12], q[13], q[14], q[15]);
 }
 
 #endif /* WIND_TIGRESS */

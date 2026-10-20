@@ -88,7 +88,9 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
 __attribute__((always_inline)) INLINE static void wind_drift_part(
     struct part *p, const struct xpart *xp, const double dt_drift) {}
 
-INLINE static float wind_timestep(const struct wind_props *props) {
+INLINE static float wind_timestep(const struct wind_props *props,
+                                  const struct part *p,
+                                  const struct xpart *xp) {
   return FLT_MAX;
 }
 

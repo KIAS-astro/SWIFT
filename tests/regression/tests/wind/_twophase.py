@@ -13,7 +13,7 @@ CR_ETA_E = {"K20": 0.0, "TIGRESSpp": 0.3}
 PHASE_KEYS = ["t", "n_hot", "m_hot", "n_warm", "m_warm", "E_cr_launch",
               "E_cr_release", "E_cr_deposit", "n_apex", "m_over_eta_hot",
               "m_over_eta_warm", "E_launch_hot", "E_launch_warm", "p_launch_hot",
-              "p_launch_warm"]
+              "p_launch_warm", "E_warm_expected", "E_warm_variance"]
 
 
 def powerlaw(norm, slope, sigma_sfr):

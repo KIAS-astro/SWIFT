@@ -216,6 +216,10 @@ def analyze_launch(ctx, checks):
                         np.sum(mw * mom[:, 0]) / M_w, kind="sigma", tol=3.0,
                         sigma=np.sqrt(np.sum(mw ** 2 * mom[:, 1] ** 2)) / M_w,
                         source="E[v_L] by quadrature at each launch's v0"))
+    checks.append(Check(f"{name}: log expected warm energy / snapshot expectation",
+                        tail["E_warm_expected"] * to_erg / np.sum(mw * e_i), 1.0,
+                        kind="rel", tol=1e-5, source="per-launch v0 from the recorded "
+                                                     "float Sigma_SFR"))
     eta_E_w = ETA_W * e_mean / U_STAR
     rel_var = (1 + ETA_W) / (ETA_W * n_star) + (se / e_mean) ** 2
     checks.append(Check(f"{name}: warm eta_E realised", E_w / (U_STAR * m_star), eta_E_w,

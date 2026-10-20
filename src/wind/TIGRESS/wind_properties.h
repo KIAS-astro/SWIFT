@@ -81,6 +81,9 @@ struct wind_props {
   /*! Time-step cap while decoupled */
   float dt_max;
 
+  /*! Largest overshoot of the recoupling distance, as a fraction of it */
+  double overshoot_fraction;
+
   /*! Warm channel (wind-design.md Sec. 10): on/off; constant loading (used
    * if positive) or power law 10^norm Sigma_SFR^slope */
   int warm_phase;
@@ -119,6 +122,10 @@ struct wind_global_stats {
   /* Launched energy m (kick^2 / 2 + gamma u) and momentum m kick per phase;
    * the kick excludes the velocity the particle had before the launch */
   double E_launch_hot, E_launch_warm, p_launch_hot, p_launch_warm;
+  /* K20a warm speeds: expected launched energy sum m (3 v0^2 + v_climb^2/2 +
+   * gamma u) at each launch's v0, and the variance of the realised sum about
+   * it, sum m^2 21 v0^4 (a test of the draw over every launch) */
+  double E_launch_warm_expected, E_launch_warm_variance;
 };
 
 extern struct wind_global_stats wind_global_stats;

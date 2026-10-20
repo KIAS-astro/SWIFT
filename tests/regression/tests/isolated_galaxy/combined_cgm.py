@@ -68,12 +68,13 @@ def run(ctx):
 def analyze(ctx):
     checks = []
     for name in RUNS:
-        last = snapshots(ctx.path(name))[-1]
+        snaps = snapshots(ctx.path(name))
+        last = snaps[-1]
         checks.append(Check(f"{name}: end time [Myr]", last.time_cgs / units.MYR,
                             T_END_MYR, kind="rel", tol=1e-3,
                             source="SWIFT_REG_CGMC_TEND_MYR"))
         if name != "nowind":
             tail = ark2.wind_checks(ctx, name, WINDS[name], last, checks)
-            arkc.combined_checks(ctx, name, WINDS[name], last, checks, V_CLIMB)
+            arkc.combined_checks(ctx, name, WINDS[name], snaps, checks, V_CLIMB)
             ctx.info[name] = {"wind_phases": tail, "seed": arkc.SEED}
     return checks

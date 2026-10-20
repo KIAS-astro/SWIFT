@@ -859,6 +859,20 @@ Wind:
   recoupling_kernel_factor:    2.          # (Optional) The recoupling distance is at least this many kernel supports at launch. (Default: 2)
   recoupling_time_Myr:         25.         # (Optional) Recoupling time in Myr. (Default: 25)
   max_timestep_Myr:            1.          # (Optional) Time-step cap while decoupled in Myr. (Default: 1)
+  mode:                        particle    # (Optional) particle (whole gas particles launched) or light (light particles of light_gas_mass_Msun / light_N spawned at tree rebuilds from per-particle reservoirs and merged back by a refinement clock). (Default: particle)
+  light_gas_mass_Msun:         2e5         # (Needed for mode light) Base gas particle mass m_g in Msun.
+  light_N:                     3           # (Needed for mode light) m_g / m_l, at most light_max_mass_ratio.
+  light_max_mass_ratio:        3           # (Optional) Upper bound on light_N. Shock tubes with light particles at a contact have 1.2-1.5 times the error of an equal-mass tube at 3 and 3-5 times at 10-30 (SPHENIX and GIZMO-MFM); larger values are an explicit choice. (Default: 3)
+  light_R200_kpc:              97.9        # (Optional) R_200 of the refinement clock (Bennett et al. 2025, eq. 12). (Default: 97.9)
+  light_t0_Myr:                10.         # (Optional) Decay time of the refinement dye. (Default: 10)
+  light_k:                     0.25        # (Optional) Fraction of the Bernoulli speed in the clock. (Default: 0.25)
+  light_fw_thresh:             1000.       # (Optional) Dye above which the target mass is m_l. (Default: 1000)
+  light_fw_ref:                0.1         # (Optional) Dye at which the target mass reaches m_g. (Default: 0.1)
+  light_rebuild_interval_Myr:  1.          # (Optional) Forced tree-rebuild interval in light mode. (Default: 1)
+  light_source_Mdot_Msun_p_yr: 0.          # (Optional) Central source of light particles (test problems): mass rate. (Default: 0, no source)
+  light_source_Edot_erg_p_s:   0.          # (Needed with a source) Energy rate.
+  light_source_radius_kpc:     0.3         # (Optional) Source radius. (Default: 0)
+  light_source_centre:         [0, 0, 0]   # (Optional) Source centre in internal length units. (Default: [0, 0, 0])
 
 # AGORA feedback model
 AGORAFeedback:

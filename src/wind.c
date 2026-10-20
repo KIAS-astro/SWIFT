@@ -156,8 +156,10 @@ void wind_props_init(struct wind_props *props,
   props->light_m_g = 0.;
   props->light_m_l = 0.;
   props->light_N = 1.;
+  /* Shock tubes with light particles at a contact keep their error within
+   * 1.5 times an equal-mass tube at a mass ratio of 3, not at 10 or 30 */
   props->light_max_mass_ratio = parser_get_opt_param_double(
-      params, "Wind:light_max_mass_ratio", 10.);
+      params, "Wind:light_max_mass_ratio", 3.);
   props->light_R200 =
       parser_get_opt_param_double(params, "Wind:light_R200_kpc", 97.9) * kpc;
   props->light_t0 =

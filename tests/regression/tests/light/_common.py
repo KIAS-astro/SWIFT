@@ -39,7 +39,8 @@ def light_tail(log_path):
 
 def light_params(m_g_Msun, N, **extra):
     """The Wind section entries of light mode."""
+    # The tests run at N up to 10, above the default cap of 3, by explicit choice
     p = {"mode": "light", "light_gas_mass_Msun": float(m_g_Msun),
-         "light_N": float(N)}
+         "light_N": float(N), "light_max_mass_ratio": max(3.0, float(N))}
     p.update(extra)
     return p

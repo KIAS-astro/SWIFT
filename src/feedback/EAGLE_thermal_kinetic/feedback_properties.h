@@ -149,6 +149,10 @@ struct feedback_props {
   /*! Normalisation of the SNIa DTD in the exponential model */
   float SNIa_DTD_exp_norm;
 
+  /*! Is the exponential DTD in star age minus delay (COLIBRE convention)
+   * rather than in star age (EAGLE convention)? */
+  int SNIa_DTD_exp_from_delay;
+
   /*! Time-scale of the SNIa decay function in the exponential model in
    * Giga-years */
   float SNIa_DTD_exp_timescale_Gyr;

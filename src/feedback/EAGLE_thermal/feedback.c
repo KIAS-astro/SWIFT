@@ -641,6 +641,22 @@ void feedback_props_init(struct feedback_props *fp,
         params, "EAGLEFeedback:SNIa_DTD_exp_timescale_Gyr");
     fp->SNIa_DTD_exp_timescale_Gyr_inv = 1.f / fp->SNIa_DTD_exp_timescale_Gyr;
 
+    /* EAGLE: exp(-t / tau) in star age t; COLIBRE: exp(-(t - t_d) / tau) */
+    char convention[32] = {0};
+    parser_get_opt_param_string(params, "EAGLEFeedback:SNIa_DTD_convention",
+                                convention, "EAGLE");
+    if (strcmp(convention, "EAGLE") == 0)
+      fp->SNIa_DTD_exp_from_delay = 0;
+    else if (strcmp(convention, "COLIBRE") == 0)
+      fp->SNIa_DTD_exp_from_delay = 1;
+    else
+      error("EAGLEFeedback:SNIa_DTD_convention must be EAGLE or COLIBRE, got '%s'",
+            convention);
+    if (engine_rank == 0)
+      message("SNIa exponential DTD in the %s convention: %s", convention,
+              fp->SNIa_DTD_exp_from_delay ? "exp(-(t - t_d) / tau)"
+                                          : "exp(-t / tau)");
+
   } else if (strcmp(temp, "PowerLaw") == 0) {
 
     fp->SNIa_DTD = eagle_feedback_SNIa_DTD_power_law;

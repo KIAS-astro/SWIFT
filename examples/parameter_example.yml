@@ -812,6 +812,7 @@ EAGLEFeedback:
   SNIa_DTD_power_law_norm_p_Msun:      0.0012          # Normalization of the SNIa delay time distribution in the power-law DTD case (in Msun^-1).
   SNIa_DTD_exp_norm_p_Msun:            0.002           # Normalization of the SNIa delay time distribution in the exponential DTD case (in Msun^-1).
   SNIa_DTD_exp_timescale_Gyr:          2.0             # Time-scale of the SNIa delay time distribution in the exponential DTD case (in Gyr).
+  SNIa_DTD_convention:                 EAGLE           # (Optional) Exponential DTD in star age, exp(-t/tau) ('EAGLE', default), or in age minus delay, exp(-(t - t_d)/tau) ('COLIBRE').
   SNIa_energy_erg:                    1.0e51           # Energy of one SNIa explosion in ergs.
   AGB_ejecta_velocity_km_p_s:         10.0             # Velocity of the AGB ejectas in km/s.
   stellar_evolution_age_cut_Gyr:       0.1             # Stellar age in Gyr above which the enrichment is down-sampled.

@@ -167,10 +167,16 @@ double eagle_feedback_number_of_SNIa(const double M_init, const double t0,
       /* We follow Foerster et al. 2006, MNRAS, 368 */
 
       /* The calculation is written as the integral between t0 and t1 of
-       * eq. 3 of Schaye 2015 paper. */
+       * eq. 3 of Schaye 2015 paper. In the EAGLE convention the exponential
+       * is in the star age, so a star makes nu exp(-t_d / tau) SNIa per Msun
+       * in total; in the COLIBRE convention (Schaye et al. 2026, eq. 13) it
+       * is in the age minus the delay, and the total is nu. */
       const double tau = props->SNIa_DTD_exp_timescale_Gyr_inv;
       const double nu = props->SNIa_DTD_exp_norm;
-      num_SNIa_per_Msun = nu * (exp(-t0 * tau) - exp(-t1 * tau));
+      const double t_shift =
+          props->SNIa_DTD_exp_from_delay ? props->SNIa_DTD_delay_Gyr : 0.;
+      num_SNIa_per_Msun =
+          nu * (exp(-(t0 - t_shift) * tau) - exp(-(t1 - t_shift) * tau));
       break;
     }
 

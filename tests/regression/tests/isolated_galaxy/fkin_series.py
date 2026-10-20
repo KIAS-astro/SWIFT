@@ -10,7 +10,8 @@ ICs/IsolatedGalaxies_COLIBRE), gas particle mass 8e5 Msun (Chaikin+23 "M6"), 205
 gas and 47950 star particles, in a Hernquist potential with M200 = 1.37e12 Msun,
 c = 9, disc fraction 0.04, bulge fraction 0.014 (as Chaikin+23 Sec. 3.2 and the SWIFT
 IsolatedGalaxy_feedback example). Softening 0.4 kpc. EAGLE star formation (pressure
-law), cooling and reference entropy floor; enrichment on, SNIa continuous.
+law), cooling and reference entropy floor; enrichment on, SNIa continuous, with the
+COLIBRE delay-time distribution exp(-(t - t_d)/tau).
 SN feedback as Chaikin+23's fiducial: f_E = 2, Delta T = 10^7.5 K, Delta v = 50 km/s,
 8 rays, with f_kin = 0, 0.1, 1, and one run with COLIBRE's Delta T(n_H) (m6 values)
 at f_kin = 0.1. 1 Gyr, snapshots every 10 Myr.
@@ -124,7 +125,7 @@ def run(ctx):
         p["EAGLEFeedback"].update({
             "SNII_energy_fraction_min": 2.0, "SNII_energy_fraction_max": 2.0,
             "SNII_delta_T_K": 10 ** 7.5, "SNII_delta_v_km_p_s": 50.0,
-            "SNII_sampled_delay": 1})
+            "SNII_sampled_delay": 1, "SNIa_DTD_convention": "COLIBRE"})
         p["EAGLEFeedback"].update(fb)
         if RES.endswith("_cgm"):  # per-particle metals from the ICs (CGM at 0.3 solar)
             p["EAGLEChemistry"]["init_abundance_metal"] = -1

@@ -192,7 +192,7 @@ INLINE static void hydro_write_particles(const struct part *parts,
                                          struct io_props *list,
                                          int *num_fields) {
 
-  *num_fields = 16;
+  *num_fields = 19;
 
   /* List what we want to write */
   list[0] = io_make_output_field_convert_part(
@@ -275,6 +275,20 @@ INLINE static void hydro_write_particles(const struct part *parts,
       "Softenings", FLOAT, 1, UNIT_CONV_LENGTH, 1.f, parts, xparts,
       convert_part_softening,
       "Co-moving gravitational Plummer-equivalent softenings of the particles");
+
+  /* DEBUG (arkenstone-debug): the SPH force state at the particle's last
+   * force calculation */
+  list[16] = io_make_output_field("HydroAccelerations", FLOAT, 3,
+                                  UNIT_CONV_ACCELERATION, 1.f, parts, a_hydro,
+                                  "DEBUG: SPH (hydro) acceleration at the last "
+                                  "force calculation");
+  list[17] = io_make_output_field("GradHTerms", FLOAT, 1, UNIT_CONV_NO_UNITS, 0.f,
+                                  parts, force.f,
+                                  "DEBUG: SPHENIX grad-h term force.f "
+                                  "(f_ij = 1 - f_i / m_j)");
+  list[18] = io_make_output_field("SoundSpeeds", FLOAT, 1, UNIT_CONV_SPEED, 0.f,
+                                  parts, force.soundspeed,
+                                  "DEBUG: sound speed used in the force loop");
 }
 
 /**

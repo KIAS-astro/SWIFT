@@ -135,7 +135,17 @@ INLINE static int wind_write_particles(const struct part *parts,
       wind_data.recouple_reason,
       "Criterion that ended the last flight: 0 none, 1 distance or height, 2 "
       "density, 3 time, 4 apex");
-  return 19;
+  list[19] = io_make_output_field(
+      "WindMergeTimes", FLOAT, 1, UNIT_CONV_TIME, 0.f, parts,
+      wind_data.merge_time,
+      "Time at which a wind particle was last merged into this particle as "
+      "its host (-1 if never)");
+  list[20] = io_make_output_field(
+      "WindMergePositions", DOUBLE, 3, UNIT_CONV_LENGTH, 1.f, parts,
+      wind_data.merge_x,
+      "Position of this particle at the last merge of a wind particle into "
+      "it (not shifted to the box centre; 0 if never a host)");
+  return 21;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

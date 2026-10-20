@@ -80,6 +80,11 @@ struct wind_part_data {
    * -1 when not computed */
   float rho_ambient;
 
+  /*! Time and position of the last merge of a wind particle into this
+   * particle as its host (deposit into a host); -1 if never a host */
+  double merge_x[3];
+  float merge_time;
+
   /*! Number of launches of this particle */
   int launch_count;
 

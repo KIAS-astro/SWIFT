@@ -3243,7 +3243,8 @@ esac
 AC_ARG_WITH([wind],
     [AS_HELP_STRING([--with-wind=<model>],
        [decoupled galactic wind @<:@none, TIGRESS, default: none@:>@
-       TIGRESS needs --with-star-formation=PRFM and --with-hydro=sphenix.]
+       TIGRESS needs --with-star-formation=PRFM and --with-hydro=sphenix
+       or gizmo-mfm.]
     )],
     [with_wind="$withval"],
     [with_wind="none"]
@@ -3257,8 +3258,10 @@ case "$with_wind" in
       if test "$with_star_formation" != "PRFM"; then
          AC_MSG_ERROR([--with-wind=TIGRESS needs --with-star-formation=PRFM])
       fi
-      if test "$with_hydro" != "sphenix"; then
-         AC_MSG_ERROR([--with-wind=TIGRESS needs --with-hydro=sphenix])
+      # GIZMO-MFV is refused: its mass fluxes would change the masses of light
+      # wind particles without bound (light-particles-design.md Sec. 3.2)
+      if test "$with_hydro" != "sphenix" -a "$with_hydro" != "gizmo-mfm"; then
+         AC_MSG_ERROR([--with-wind=TIGRESS needs --with-hydro=sphenix or gizmo-mfm])
       fi
       AC_DEFINE([WIND_TIGRESS], [1], [Decoupled wind with TIGRESS loadings (Kim et al. 2020)])
    ;;

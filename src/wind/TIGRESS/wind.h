@@ -137,6 +137,8 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.recouple_distance = -1.f;
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
   p->wind_data.rho_ambient = -1.f;
+  p->wind_data.merge_time = -1.f;
+  for (int k = 0; k < 3; k++) p->wind_data.merge_x[k] = 0.;
   p->wind_data.launch_count = 0;
   p->wind_data.decoupled = decoupled ? 1 : 0;
   p->wind_data.recouple_reason = wind_reason_none;
@@ -172,12 +174,18 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   if (decoupled) {
     p->wind_data.launch_time = time;
     p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
-    p->wind_data.launch_e_th = xp->u_full;
+    p->wind_data.launch_e_th = hydro_get_comoving_internal_energy(p, xp);
     p->wind_data.launch_count = 1;
     hydro_reset_acceleration(p);
     /* Never computed for a decoupled particle; any positive value keeps the
      * pressure and sound speed set in the kick finite */
     if (p->rho <= 0.f) p->rho = hydro_get_mass(p) / (p->h * p->h * p->h);
+#if defined(GIZMO_MFM_SPH)
+    /* Likewise the GIZMO volume, which sets the first CFL step at
+     * recoupling */
+    if (p->geometry.volume <= 0.f)
+      p->geometry.volume = hydro_get_mass(p) / p->rho;
+#endif
   }
 }
 
@@ -283,6 +291,17 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
     if (p->gpart != NULL) p->gpart->v_full[k] = xp->v_full[k];
   }
 
+  /* A particle launched at a tree rebuild may have had its density reset by
+   * the drift (active particles are re-initialised for the density loop).
+   * The density of a decoupled particle is never recomputed; any positive
+   * value keeps the pressure and sound speed finite */
+  if (p->rho <= 0.f) p->rho = hydro_get_mass(p) / (p->h * p->h * p->h);
+#if defined(GIZMO_MFM_SPH)
+  /* Likewise the GIZMO volume, which sets the first CFL step at recoupling */
+  if (p->geometry.volume <= 0.f)
+    p->geometry.volume = hydro_get_mass(p) / p->rho;
+#endif
+
   hydro_set_physical_internal_energy(p, xp, cosmo, u_w);
   hydro_set_drifted_physical_internal_energy(p, cosmo, NULL, u_w);
 
@@ -297,7 +316,7 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
     p->wind_data.launch_x[k] = p->x[k];
   }
   p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
-  p->wind_data.launch_e_th = xp->u_full;
+  p->wind_data.launch_e_th = hydro_get_physical_internal_energy(p, xp, cosmo);
   p->wind_data.rho_ambient = -1.f;
   p->wind_data.recouple_pending = wind_reason_none;
   p->wind_data.d_rec =
@@ -421,7 +440,8 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
   p->wind_data.recouple_time = time;
   p->wind_data.recouple_distance = wind_recoupling_measure(p, props);
   p->wind_data.recouple_e_kin = wind_specific_kinetic(xp);
-  p->wind_data.recouple_e_th = xp->u_full;
+  p->wind_data.recouple_e_th =
+      hydro_get_physical_internal_energy(p, xp, cosmo);
   hydro_reset_acceleration(p);
 
   const double m = hydro_get_mass(p);
@@ -430,7 +450,7 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
   if (E_cr > 0.) {
     atomic_add_d(&wind_global_stats.E_cr_release, E_cr);
     if (props->cr_deposit_thermal) {
-      const double u_new = xp->u_full + E_cr / m;
+      const double u_new = p->wind_data.recouple_e_th + E_cr / m;
       hydro_set_physical_internal_energy(p, xp, cosmo, u_new);
       hydro_set_drifted_physical_internal_energy(p, cosmo, NULL, u_new);
       atomic_add_d(&wind_global_stats.E_cr_deposit, E_cr);

@@ -567,6 +567,35 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
         m;
 #endif
 
+  /* Where the host's contents came from, for diagnostics of the deposited
+   * wind (WindMergeTimes, WindMergePositions) */
+  h->wind_data.merge_time = e->time;
+  for (int k = 0; k < 3; k++) h->wind_data.merge_x[k] = h->x[k];
+
+#if defined(GIZMO_MFM_SPH)
+  /* GIZMO stores mass, momentum and energy. hydro_set_mass scales momentum
+   * and energy with the mass, keeping the host's v and u; the change of
+   * v_full reaches the conserved momentum at the host's next kick
+   * (hydro_velocities_absorb_external_kick); the energy setter then writes
+   * E = m u. None of these writes a density-loop sum (wcount, geometry). An
+   * inactive host keeps its volume, so its primitive density rises with
+   * the mass, and the energy setter derives the pressure from it; an active
+   * host recomputes both in its density loop this step. */
+  hydro_set_mass(h, m);
+  if (h->gpart != NULL) h->gpart->mass = m;
+  for (int k = 0; k < 3; k++) {
+    hx->v_full[k] = v[k];
+    h->v[k] = v[k];
+    if (h->gpart != NULL) h->gpart->v_full[k] = v[k];
+  }
+  h->rho *= m / mh;
+  hydro_set_physical_internal_energy(h, hx, cosmo, u);
+  if (!host_active) {
+    hydro_set_v_sig_based_on_velocity_kick(h, cosmo, sqrt(dv2));
+    timestep_sync_part(h);
+    cell_activate_sync_part(hc, &e->sched);
+  }
+#else
   hydro_set_mass(h, m);
   if (h->gpart != NULL) h->gpart->mass = m;
   for (int k = 0; k < 3; k++) {
@@ -584,7 +613,9 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
 #if defined(SPHENIX_SPH)
     hydro_set_init_internal_energy(h, u / cosmo->a_factor_internal_energy);
 #else
-    error("Wind: merging into an active host is implemented for SPHENIX only");
+    error(
+        "Wind: merging into an active host is implemented for SPHENIX and "
+        "GIZMO-MFM only");
 #endif
   } else {
     hydro_set_drifted_physical_internal_energy(h, cosmo, NULL, u);
@@ -594,6 +625,7 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     timestep_sync_part(h);
     cell_activate_sync_part(hc, &e->sched);
   }
+#endif
 
   /* The particle's mass and gravity are now the host's */
   if (p->gpart != NULL) p->gpart->mass = 0.f;

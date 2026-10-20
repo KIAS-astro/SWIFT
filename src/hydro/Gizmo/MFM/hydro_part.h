@@ -183,6 +183,9 @@ struct part {
   /*! Time-step limiter information */
   struct timestep_limiter_data limiter_data;
 
+  /*! Decoupled-wind data */
+  struct wind_part_data wind_data;
+
 #ifdef SWIFT_DEBUG_CHECKS
 
   /* Time of the last drift */

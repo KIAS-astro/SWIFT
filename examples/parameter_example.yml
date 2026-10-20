@@ -599,6 +599,13 @@ QLAEntropyFloor:
   over_density_threshold:    10.       # Overdensity above which the entropy floor can kick in.
   temperature_norm_K:        8000      # Temperature of the entropy floor at the density threshold expressed in Kelvin.
 
+# Parameters for the PRFM floor (TIGRESS effective EoS)
+PRFMEntropyFloor:
+  calibration:               OK22      # (Optional) TIGRESS calibration: OK22 (default) or K24.
+  eos_form:                  J26       # (Optional) Effective EoS P/k_B(n_H): J26 (4.7e4 n_H^1.8), OK22_fit (10^4.30 n_H^1.43) or K24 (3.03e4 n_H^1.316 Z'^0.079). Default: J26 with OK22, K24 with K24.
+  density_threshold_H_p_cm3: 0.13      # (Optional) Density n_H = rho / (1.4 m_H) above which the floor applies, in cm^-3 (default 0.13).
+  solar_metallicity:         0.014     # (Optional) Solar metal mass fraction for Z' (default 0.014).
+
 
 # Parameters related to pressure floors    ----------------------------------------------
 

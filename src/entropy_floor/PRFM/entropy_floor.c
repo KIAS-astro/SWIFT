@@ -152,6 +152,23 @@ void entropy_floor_init(struct entropy_floor_properties *props,
     error("PRFMEntropyFloor:calibration must be OK22 or K24, got '%s'", cal);
   prfm_calibration_init(props->cal_choice, &props->cal);
 
+  /* Default: the form that belongs to the calibration */
+  const char *form_default =
+      props->cal_choice == prfm_calibration_K24 ? "K24" : "J26";
+  char form[32];
+  parser_get_opt_param_string(params, "PRFMEntropyFloor:eos_form", form,
+                              form_default);
+  if (strcmp(form, "J26") == 0)
+    props->eos_form = prfm_eos_J26;
+  else if (strcmp(form, "OK22_fit") == 0)
+    props->eos_form = prfm_eos_OK22_fit;
+  else if (strcmp(form, "K24") == 0)
+    props->eos_form = prfm_eos_K24;
+  else
+    error("PRFMEntropyFloor:eos_form must be J26, OK22_fit or K24, got '%s'",
+          form);
+  prfm_eos_form_init(props->eos_form, &props->cal);
+
   props->density_threshold_H_p_cm3 = parser_get_opt_param_double(
       params, "PRFMEntropyFloor:density_threshold_H_p_cm3", 0.13);
   props->solar_metallicity_inv =
@@ -182,9 +199,9 @@ void entropy_floor_print(const struct entropy_floor_properties *props) {
   message("Entropy floor is 'PRFM' (TIGRESS effective EoS) with:");
   message(
       "P/k_B = %.3g n_H^%.3g Z'^%.3g K cm^-3 above n_H = %.3g cm^-3 "
-      "(n_H = rho / 1.4 m_H), calibration %s",
+      "(n_H = rho / 1.4 m_H), EoS form %s, calibration %s",
       props->cal.eos_norm, props->cal.eos_slope, props->cal.eos_Z,
-      props->density_threshold_H_p_cm3,
+      props->density_threshold_H_p_cm3, prfm_eos_form_name(props->eos_form),
       props->cal_choice == prfm_calibration_K24 ? "K24" : "OK22");
 }
 

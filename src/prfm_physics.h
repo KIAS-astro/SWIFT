@@ -177,6 +177,62 @@ static inline void prfm_calibration_init(enum prfm_calibration_choice choice,
 }
 
 /**
+ * @brief The functional form of the effective EoS.
+ */
+enum prfm_eos_form {
+  prfm_eos_J26,      /*!< J26 eq. 15: P/k_B = 4.7e4 n_H^1.8 */
+  prfm_eos_OK22_fit, /*!< OK22 eq. 27 (B25 eq. 19): 10^4.30 n_H^1.43 */
+  prfm_eos_K24       /*!< implied by K24 eq. 23: 3.03e4 n_H^1.316 Z'^0.079 */
+};
+
+/**
+ * @brief Name of an effective EoS form, as written in the parameter file.
+ */
+static inline const char *prfm_eos_form_name(const enum prfm_eos_form form) {
+  switch (form) {
+    case prfm_eos_J26:
+      return "J26";
+    case prfm_eos_OK22_fit:
+      return "OK22_fit";
+    case prfm_eos_K24:
+      return "K24";
+  }
+  return "unknown";
+}
+
+/**
+ * @brief Set the effective EoS of a calibration to a given form.
+ *
+ * J26: eq. 15, the OK22 sigma_eff-P fit written as an EoS (H24 eq. 35).
+ * OK22_fit: the direct fit to the TIGRESS midplane two-phase gas,
+ * log P/k_B = 1.43 log n_H + 4.30 (OK22 eq. 27, B25 eq. 19). B25 defines
+ * n_H = X_H rho / m_p; here n_H = rho / (1.4 m_H) for every form, 6 per cent
+ * lower at X_H = 0.76.
+ * K24: the form prfm_calibration_init gives the K24 calibration.
+ *
+ * @param form Which form.
+ * @param cal (return) The calibration whose eos_* members are set.
+ */
+static inline void prfm_eos_form_init(const enum prfm_eos_form form,
+                                      struct prfm_calibration *cal) {
+  if (form == prfm_eos_K24) {
+    struct prfm_calibration k24;
+    prfm_calibration_init(prfm_calibration_K24, &k24);
+    cal->eos_norm = k24.eos_norm;
+    cal->eos_slope = k24.eos_slope;
+    cal->eos_Z = k24.eos_Z;
+  } else if (form == prfm_eos_OK22_fit) {
+    cal->eos_norm = pow(10., 4.30);
+    cal->eos_slope = 1.43;
+    cal->eos_Z = 0.;
+  } else {
+    cal->eos_norm = 4.7e4;
+    cal->eos_slope = 1.8;
+    cal->eos_Z = 0.;
+  }
+}
+
+/**
  * @brief Metallicity Z' clipped at the lowest calibrated value.
  */
 static inline double prfm_clip_Zprime(const double Zprime) {

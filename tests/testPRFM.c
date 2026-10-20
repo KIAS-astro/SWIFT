@@ -236,6 +236,46 @@ int main(int argc, char *argv[]) {
   check("K24 EoS slope", k24.eos_slope, 1.316, 0.0005 / 1.316);
   check("K24 EoS metallicity exponent", k24.eos_Z, 0.079, 0.0005 / 0.079);
 
+  /* The three EoS forms selected by PRFMEntropyFloor:eos_form, set on an
+   * OK22 calibration, against their printed formulae at n_H = 0.13-1000:
+   * J26 eq. 15, 4.7e4 n_H^1.8 (exact); OK22 eq. 27, log P/k_B =
+   * 1.43 log n_H + 4.30 (exact); K24 3.03e4 n_H^1.316 Z'^0.079 at
+   * Z' = 1, 0.3, 0.1 and 0.01 (clipped to 0.1), to half a unit in the last
+   * printed digit of each constant, i.e. 0.005 / 3.03 + (0.0005 |ln n_H| +
+   * 0.0005 |ln Z'|). */
+  {
+    const double ns[5] = {0.13, 1., 10., 100., 1000.};
+    const double Zs[4] = {1., 0.3, 0.1, 0.01};
+    struct prfm_calibration j26 = ok22, fit = ok22, k24f = ok22;
+    prfm_eos_form_init(prfm_eos_J26, &j26);
+    prfm_eos_form_init(prfm_eos_OK22_fit, &fit);
+    prfm_eos_form_init(prfm_eos_K24, &k24f);
+    for (int i = 0; i < 5; i++) {
+      const double n = ns[i];
+      char name[96];
+      sprintf(name, "EoS J26 P/k_B at n_H = %g", n);
+      check(name, prfm_eos_pressure(n, &j26, 0.3) / P_unit,
+            4.7e4 * pow(n, 1.8), 1e-12);
+      sprintf(name, "EoS OK22_fit log P/k_B at n_H = %g", n);
+      check(name, log10(prfm_eos_pressure(n, &fit, 0.3) / P_unit),
+            1.43 * log10(n) + 4.30, 1e-12);
+      for (int j = 0; j < 4; j++) {
+        const double Zc = Zs[j] > 0.1 ? Zs[j] : 0.1;
+        const double tol =
+            0.005 / 3.03 + 0.0005 * fabs(log(n)) + 0.0005 * fabs(log(Zc));
+        sprintf(name, "EoS K24 P/k_B at n_H = %g, Z' = %g", n, Zs[j]);
+        check(name, prfm_eos_pressure(n, &k24f, Zs[j]) / P_unit,
+              3.03e4 * pow(n, 1.316) * pow(Zc, 0.079), tol);
+      }
+    }
+    check("eos_form K24 equals the K24 calibration's EoS",
+          prfm_eos_pressure(10., &k24f, 0.2), prfm_eos_pressure(10., &k24, 0.2),
+          1e-14);
+    check("eos_form J26 equals the OK22 calibration's EoS",
+          prfm_eos_pressure(10., &j26, 1.), prfm_eos_pressure(10., &ok22, 1.),
+          1e-14);
+  }
+
   /* K24 EoS consistency: P_eff at the equilibrium density W / sigma_eff(W)^2
    * returns W (exact up to rounding) */
   {

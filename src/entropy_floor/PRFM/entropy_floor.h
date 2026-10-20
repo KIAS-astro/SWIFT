@@ -40,9 +40,11 @@ struct swift_params;
  * @brief The TIGRESS effective equation of state used as a pressure floor.
  *
  * Above n_H = rho / (1.4 m_H) >= n_th the pressure is held at or above
- * P_eff(n_H): OK22 (J26) P/k_B = 4.7e4 n_H^1.8 K cm^-3, or for K24 the EoS
- * implied by the K24 sigma_eff fit, P/k_B = 3.03e4 n_H^1.316 Z'^0.079
- * (src/prfm_physics.h). Below n_th there is no floor.
+ * P_eff(n_H), in one of three forms (PRFMEntropyFloor:eos_form,
+ * src/prfm_physics.h): J26 P/k_B = 4.7e4 n_H^1.8 K cm^-3 (default with the
+ * OK22 calibration); OK22_fit, the direct OK22 fit 10^4.30 n_H^1.43; K24, the
+ * EoS implied by the K24 sigma_eff fit, 3.03e4 n_H^1.316 Z'^0.079 (default
+ * with the K24 calibration). Below n_th there is no floor.
  * It is applied wherever the EAGLE floor is (cooling and hydro kick), through
  * the same interface.
  */
@@ -57,6 +59,9 @@ struct entropy_floor_properties {
 
   /*! Which calibration (for printing) */
   enum prfm_calibration_choice cal_choice;
+
+  /*! Form of the effective EoS */
+  enum prfm_eos_form eos_form;
 
   /*! Density threshold n_th in H atoms per cm^3 */
   double density_threshold_H_p_cm3;

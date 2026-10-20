@@ -2,6 +2,7 @@
 
 The floor (src/entropy_floor/PRFM/entropy_floor.c) is
   P_eff / k_B = 4.7e4 n_H^1.8 K cm^-3          (OK22, as J26)
+  log P_eff / k_B = 1.43 log n_H + 4.30         (OK22_fit: OK22 eq. 27)
   P_eff = rho sigma_eff(P_eff)^2                (K24, Z' clipped at 0.1)
 with the K24 eq. 23 dispersion sigma_eff = 11.7 km/s (P/P_0)^0.12 Z'^0.03,
 P_0 = 1e4 k_B K cm^-3, Z' = Z / 0.014. The expected K24 pressure is found
@@ -20,8 +21,10 @@ metallicity) for 5 Myr:
   n_H = 10 cm^-3 from 100 K with K24 at Z' = 0.0129 / 0.014 = 0.92 and at
       Z' = 0.1 (every EAGLE metal abundance scaled, H and He raised to keep
       the sum at 1);
+  n_H = 10 cm^-3 from 100 K with eos_form OK22_fit;
 and without cooling (hydro only, --temperature), where nothing changes u but the floor:
-  n_H = 1 cm^-3 from 100 K: lifted onto the floor by the kick;
+  n_H = 1 cm^-3 from 100 K: lifted onto the floor by the kick, J26 and
+      OK22_fit;
   n_H = 0.1 cm^-3 from 100 K: below n_th, must stay at 100 K.
 Here n_H is the J26 definition, so the boxes are written with
 rho = 1.4 m_H n_H.
@@ -30,9 +33,11 @@ On the floor, hydrodynamics leaves density fluctuations of a few per cent in
 the hot lattice (5 per cent at n_H = 100 after 5 Myr). A compressed particle
 is held on the floor; an expanded one follows its adiabat, P ~ rho^(5/3),
 which for a floor P ~ rho^1.8 lies above the floor by 0.13 times its density
-deficit. So P / P_eff >= 1 is exact for every particle, the median sits
-on the floor to 1e-3, and the maximum is allowed 1e-2, as in
-entropy_floor/eagle.
+deficit. For the softer OK22_fit floor, P ~ rho^1.43, the roles swap: an
+expanded particle is held on the floor and a compressed one lies above it
+by 0.24 times its density excess. So P / P_eff >= 1 is exact for every
+particle, the median sits on the floor to 1e-3, and the maximum is allowed
+1e-2, as in entropy_floor/eagle.
 """
 
 import os
@@ -43,7 +48,7 @@ from swiftreg import ics, params, units
 from swiftreg.checks import Check
 from swiftreg.snapshot import snapshots
 
-DESCRIPTION = "PRFM entropy floor: gas above n_th = 0.13 ends on P_eff(n_H) (OK22, K24)"
+DESCRIPTION = "PRFM entropy floor: gas above n_th = 0.13 ends on P_eff(n_H) (J26, OK22 fit, K24)"
 TIER = "quick"
 BUILDS = {"prfm": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE",
                    "--with-tracers=EAGLE", "--with-stars=EAGLE",
@@ -56,7 +61,8 @@ T_END = 5e-3  # internal units, 4.9 Myr
 Z_SUN = 0.014
 Z = params.EAGLE_SOLAR_ABUNDANCES["init_abundance_metal"]
 N_TH = 0.13
-# name: (n_H [cm^-3], T0 [K], calibration, cooling, expected, Z)
+# name: (n_H [cm^-3], T0 [K], calibration, cooling, expected, Z); the
+# calibration "OK22_fit" means calibration OK22 with eos_form OK22_fit
 CASES = {
     "n1_cold": (1.0, 1e2, "OK22", True, "on", Z),
     "n10_cold": (10.0, 1e2, "OK22", True, "on", Z),
@@ -64,7 +70,9 @@ CASES = {
     "n10_hot": (10.0, 1e7, "OK22", True, "on", Z),
     "n10_cold_K24": (10.0, 1e2, "K24", True, "on", Z),
     "n10_cold_K24_lowZ": (10.0, 1e2, "K24", True, "on", 0.1 * Z_SUN),
+    "n10_cold_OK22fit": (10.0, 1e2, "OK22_fit", True, "on", Z),
     "n1_nocool": (1.0, 1e2, "OK22", False, "on", Z),
+    "n1_nocool_OK22fit": (1.0, 1e2, "OK22_fit", False, "on", Z),
     "n0.1_nocool": (0.1, 1e2, "OK22", False, "unchanged", Z),
 }
 
@@ -90,6 +98,8 @@ def p_eff(rho_cgs, cal, Zp=1.0):
     Zp = max(Zp, 0.1)
     if cal == "K24":
         P = p_k24(rho_cgs, Zp)
+    elif cal == "OK22_fit":
+        P = 10.0 ** (1.43 * np.log10(n) + 4.30) * units.BOLTZMANN_K
     else:
         P = 4.7e4 * n ** 1.8 * units.BOLTZMANN_K
     return np.where(n >= N_TH, P, 0.0)
@@ -108,6 +118,8 @@ def run(ctx):
         p["EAGLEChemistry"] = params.eagle_abundances(Zm)
         p["PRFMEntropyFloor"] = {"calibration": cal, "density_threshold_H_p_cm3": N_TH,
                                  "solar_metallicity": Z_SUN}
+        if cal == "OK22_fit":
+            p["PRFMEntropyFloor"].update(calibration="OK22", eos_form="OK22_fit")
         # --temperature (required by the EAGLE tracers) applies no cooling
         flags = ["--hydro", "--cooling"] if cool else ["--hydro", "--temperature"]
         ctx.swift(p, flags, subdir=name, name=name)

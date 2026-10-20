@@ -71,6 +71,9 @@ struct wind_part_data {
   float launch_Sigma_SFR;
   float launch_eta_M;
 
+  /*! Speed of the kick of the last launch */
+  float launch_kick;
+
   /*! Number of launches of this particle */
   int launch_count;
 

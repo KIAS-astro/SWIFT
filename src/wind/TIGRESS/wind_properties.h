@@ -89,6 +89,12 @@ struct wind_props {
   /*! Warm launch speed, internal energy, minimum recoupling distance */
   double warm_v, warm_u, warm_d_rec;
 
+  /*! Warm launch speed drawn from the K20a cool-phase PDF instead of the
+   * fixed warm_v: on/off, scale speed v0 of the PDF at the reference height
+   * and the speed lost climbing to it (wind-design.md Sec. 11) */
+  int warm_speed_pdf;
+  double warm_pdf_v0, warm_climb_v;
+
   /*! CR energy loading, whether the warm phase carries CR energy too, and
    * whether the CR energy is deposited as heat at recoupling */
   double cr_eta_E;
@@ -109,6 +115,9 @@ struct wind_global_stats {
   double E_cr_launch, E_cr_release, E_cr_deposit, n_recouple_apex;
   /* Sum of m / eta_M of the phase over the launches (hot, warm) */
   double m_over_eta_hot, m_over_eta_warm;
+  /* Launched energy m (kick^2 / 2 + gamma u) and momentum m kick per phase;
+   * the kick excludes the velocity the particle had before the launch */
+  double E_launch_hot, E_launch_warm, p_launch_hot, p_launch_warm;
 };
 
 extern struct wind_global_stats wind_global_stats;

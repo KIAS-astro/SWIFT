@@ -178,6 +178,23 @@ void wind_props_init(struct wind_props *props,
   props->warm_d_rec = parser_get_opt_param_double(
                           params, "Wind:warm_recoupling_distance_kpc", 1.5) *
                       kpc;
+  char speed_pdf[32];
+  parser_get_opt_param_string(params, "Wind:warm_launch_speed_pdf", speed_pdf,
+                              "fixed");
+  if (strcmp(speed_pdf, "fixed") == 0)
+    props->warm_speed_pdf = 0;
+  else if (strcmp(speed_pdf, "K20a") == 0)
+    props->warm_speed_pdf = 1;
+  else
+    error("Wind:warm_launch_speed_pdf must be fixed or K20a, got '%s'",
+          speed_pdf);
+  props->warm_pdf_v0 =
+      parser_get_opt_param_double(params, "Wind:warm_pdf_v0_kms", 60.) * kms;
+  props->warm_climb_v =
+      parser_get_opt_param_double(params, "Wind:warm_climb_speed_kms", 0.) *
+      kms;
+  if (props->warm_pdf_v0 <= 0. || props->warm_climb_v < 0.)
+    error("Wind:warm_pdf_v0_kms must be positive, warm_climb_speed_kms >= 0");
 
   /* CR energy carried by the wind particles */
   props->cr_eta_E = parser_get_opt_param_double(
@@ -240,6 +257,13 @@ void wind_props_print(const struct wind_props *props) {
         "Wind: warm kick %.4g, u_warm %.4g, recoupling at max(%.4g, kernel) "
         "or t_rec or the apex (internal units)",
         props->warm_v, props->warm_u, props->warm_d_rec);
+    if (props->warm_speed_pdf)
+      message(
+          "Wind: warm kick drawn from the K20a PDF, v_L^2 = v_ref^2 + "
+          "v_climb^2, v_ref ~ Gamma(2, v0 = %.4g), v_climb = %.4g; mean "
+          "v_L^2/2 = %.4g (internal units; replaces the fixed warm kick)",
+          props->warm_pdf_v0, props->warm_climb_v,
+          wind_warm_pdf_mean_kinetic(props->warm_pdf_v0, props->warm_climb_v));
   }
   if (props->cr_eta_E > 0.)
     message("Wind: CR energy loading %.4g carried by %s, deposit %s",
@@ -291,7 +315,7 @@ void wind_print_stats(const struct engine *e) {
         e->time, s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[2] + s[3],
         s[2] + hydro_gamma * s[3]);
 
-  double q[10] = {wind_global_stats.n_launch_hot,
+  double q[14] = {wind_global_stats.n_launch_hot,
                   wind_global_stats.m_launch_hot,
                   wind_global_stats.n_launch_warm,
                   wind_global_stats.m_launch_warm,
@@ -300,18 +324,24 @@ void wind_print_stats(const struct engine *e) {
                   wind_global_stats.E_cr_deposit,
                   wind_global_stats.n_recouple_apex,
                   wind_global_stats.m_over_eta_hot,
-                  wind_global_stats.m_over_eta_warm};
+                  wind_global_stats.m_over_eta_warm,
+                  wind_global_stats.E_launch_hot,
+                  wind_global_stats.E_launch_warm,
+                  wind_global_stats.p_launch_hot,
+                  wind_global_stats.p_launch_warm};
 #ifdef WITH_MPI
-  double rq[10];
-  MPI_Reduce(q, rq, 10, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  double rq[14];
+  MPI_Reduce(q, rq, 14, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   memcpy(q, rq, sizeof(q));
 #endif
   if (e->nodeID == 0)
     message(
         "Wind phases at t=%.6e: hot N=%.0f M=%.6e; warm N=%.0f M=%.6e; CR "
         "launched=%.17e released=%.17e deposited=%.17e; apex recouplings "
-        "N=%.0f; sum m/eta hot=%.6e warm=%.6e (internal units)",
-        e->time, q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9]);
+        "N=%.0f; sum m/eta hot=%.6e warm=%.6e; launched energy hot=%.10e "
+        "warm=%.10e; momentum hot=%.10e warm=%.10e (internal units)",
+        e->time, q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9],
+        q[10], q[11], q[12], q[13]);
 }
 
 #endif /* WIND_TIGRESS */

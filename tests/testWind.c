@@ -50,11 +50,20 @@
 #include <config.h>
 
 /* Local includes. */
+#include "minmax.h"
+#include "timeline.h"
+#include "random.h"
 #include "wind_physics.h"
 
 /* System includes. */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+static int compare_double(const void *a, const void *b) {
+  const double x = *(const double *)a, y = *(const double *)b;
+  return (x > y) - (x < y);
+}
 
 static int n_fail = 0;
 
@@ -320,6 +329,91 @@ int main(int argc, char *argv[]) {
     check("CR, 1e5 launches: deposited / launched", E_dep / E_launch, 1.,
           1e-15);
     check("CR, 1e5 launches: sum m du / launched", dU / E_launch, 1., 1e-12);
+  }
+
+  /* Warm launch speeds drawn from the K20a cool-phase PDF (wind-design.md
+   * Sec. 11): v_ref ~ Gamma(2, v0) at the reference height, v_L^2 = v_ref^2 +
+   * v_climb^2 */
+  {
+    const double v0 = 60., climbs[2] = {0., 60.5};
+    const int n = 200000;
+    double *v = (double *)malloc(n * sizeof(double));
+    for (int c = 0; c < 2; c++) {
+      const double vc = climbs[c];
+      double s2 = 0.;
+      for (int i = 0; i < n; i++) {
+        /* The two streams and the id/time packing used at launch */
+        const double u1 = random_unit_interval(1000003LL * i + 17, 4096 + i,
+                                               random_number_wind_warm_speed_1);
+        const double u2 = random_unit_interval(1000003LL * i + 17, 4096 + i,
+                                               random_number_wind_warm_speed_2);
+        v[i] = wind_warm_pdf_speed(u1, u2, v0, vc);
+        s2 += 0.5 * v[i] * v[i];
+      }
+      qsort(v, n, sizeof(double), compare_double);
+      double D = 0.;
+      for (int i = 0; i < n; i++) {
+        const double F = wind_warm_pdf_cdf(v[i], v0, vc);
+        D = fmax(D, fmax(fabs((i + 1.) / n - F), fabs(F - (double)i / n)));
+      }
+      /* Kolmogorov-Smirnov: D exceeds 1.949 / sqrt(n) with probability 1e-3
+       * for draws from the target distribution */
+      char name[128];
+      snprintf(name, sizeof(name), "K20a PDF, v_climb = %g: KS D sqrt(n) < 1.949",
+               vc);
+      const double Dn = D * sqrt((double)n);
+      printf("%s %-58s measured %.6g (critical 1.949 at p = 1e-3)\n",
+             Dn < 1.949 ? "ok  " : "FAIL", name, Dn);
+      if (Dn >= 1.949) n_fail++;
+      /* Mean of v_L^2 / 2 within 4 standard errors; Var(v_ref^2 / 2) =
+       * (120 - 36) v0^4 / 4 = 21 v0^4 */
+      const double mean = wind_warm_pdf_mean_kinetic(v0, vc);
+      snprintf(name, sizeof(name), "K20a PDF, v_climb = %g: mean v^2/2", vc);
+      check(name, s2 / n, mean, 4. * sqrt(21. / n) * v0 * v0 / mean);
+    }
+    free(v);
+
+    /* CDF and mean kinetic energy against direct quadrature of the PDF in
+     * v_ref (midpoint rule, 4e6 cells to 40 v0: truncation e^-40) */
+    for (int c = 0; c < 2; c++) {
+      const double vc = climbs[c];
+      const int m = 4000000;
+      const double h = 40. * v0 / m, vq = 150.;
+      double cdf = 0., ek = 0., norm = 0.;
+      for (int i = 0; i < m; i++) {
+        const double x = (i + 0.5) * h;
+        const double p = x / (v0 * v0) * exp(-x / v0) * h;
+        const double vl = sqrt(x * x + vc * vc);
+        norm += p;
+        ek += 0.5 * vl * vl * p;
+        if (vl < vq) cdf += p;
+      }
+      char name[128];
+      snprintf(name, sizeof(name), "K20a PDF, v_climb = %g: normalisation", vc);
+      check(name, norm, 1., 1e-9);
+      snprintf(name, sizeof(name), "K20a PDF, v_climb = %g: CDF(150 km/s)", vc);
+      /* The quadrature resolves the step at v_L = 150 to one cell: error up
+       * to p h = 2.3e-6, 3.5e-6 relative with the climb */
+      check(name, wind_warm_pdf_cdf(vq, v0, vc), cdf, 5e-6);
+      snprintf(name, sizeof(name), "K20a PDF, v_climb = %g: mean v^2/2", vc);
+      check(name, wind_warm_pdf_mean_kinetic(v0, vc), ek, 1e-9);
+    }
+    check("K20a PDF: survival(a) = 1 - CDF(a) without climb",
+          wind_warm_pdf_survival(67., v0), 1. - wind_warm_pdf_cdf(67., v0, 0.),
+          1e-14);
+    check("K20a PDF: survival(0) = 1", wind_warm_pdf_survival(0., v0), 1., 0.);
+    check("K20a PDF: u1 = u2 = 0 launches at v_climb",
+          wind_warm_pdf_speed(0., 0., v0, 60.5), 60.5, 1e-15);
+
+    /* Expected warm energy per launched mass at the Arkenstone set-up (v0 =
+     * 60, v_climb = 60.5 km/s, 1e4 K): 3 v0^2 + v_c^2/2 + gamma u = 10800 +
+     * 1830.1 + 343.4 (km/s)^2; eta_E,warm = eta_M,warm times this over u_* */
+    const double u_w = 206.05 * kms * kms;
+    const double e = wind_warm_pdf_mean_kinetic(v0 * kms, 60.5 * kms) +
+                     5. / 3. * u_w;
+    check("K20a PDF: warm e per mass [(km/s)^2] at v0 = 60, v_c = 60.5",
+          e / (kms * kms), 12973.5, 1e-5);
+    printf("     K20a PDF: eta_E,warm / eta_M,warm = %.5f\n", e / u_star);
   }
 
   if (n_fail) {

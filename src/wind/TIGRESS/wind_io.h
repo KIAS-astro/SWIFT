@@ -119,7 +119,12 @@ INLINE static int wind_write_particles(const struct part *parts,
       wind_data.launch_eta_M,
       "Mass loading of the launched phase at the last launch (-1 if never "
       "launched)");
-  return 16;
+  list[16] = io_make_output_field(
+      "WindLaunchKicks", FLOAT, 1, UNIT_CONV_VELOCITY, 0.f, parts,
+      wind_data.launch_kick,
+      "Speed of the kick along the launch direction at the last launch "
+      "(physical; -1 if never launched)");
+  return 17;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

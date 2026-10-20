@@ -267,6 +267,65 @@ static inline double wind_cr_specific_energy(const double u_star,
   return eta_E_cr * u_star / eta_M_carry;
 }
 
+/*
+ * Warm launch speeds drawn from the K20a cool-phase outflow velocity PDF
+ * (wind-design.md Sec. 11). K20a fit the mass-flux PDF per dex of v_out as
+ * (v/v0)^2 exp(-v/v0); per unit v this is the Gamma distribution of shape 2,
+ * p(v) = v / v0^2 exp(-v/v0), mean 2 v0. The speed at the reference height
+ * v_ref is drawn from it; the launch speed adds the potential climb from the
+ * midplane to that height, v_L^2 = v_ref^2 + v_climb^2.
+ */
+
+/**
+ * @brief Launch speed from two uniform numbers.
+ *
+ * v_ref = -v0 ln((1 - u1)(1 - u2)) is the sum of two exponential numbers of
+ * mean v0, which is Gamma(2, v0) distributed; 1 - u lies in (0, 1].
+ *
+ * @param u1 Uniform number in [0, 1).
+ * @param u2 Uniform number in [0, 1), independent of u1.
+ * @param v0 Scale speed of the PDF.
+ * @param v_climb Speed lost climbing to the reference height.
+ */
+static inline double wind_warm_pdf_speed(const double u1, const double u2,
+                                         const double v0,
+                                         const double v_climb) {
+  const double v_ref = -v0 * (log1p(-u1) + log1p(-u2));
+  return sqrt(v_ref * v_ref + v_climb * v_climb);
+}
+
+/**
+ * @brief Cumulative distribution of the launch speed, the fraction of the
+ * launched mass with v_L < v: 1 - (1 + x) exp(-x), x = (v^2 -
+ * v_climb^2)^1/2 / v0; 0 for v <= v_climb.
+ */
+static inline double wind_warm_pdf_cdf(const double v, const double v0,
+                                       const double v_climb) {
+  if (v <= v_climb) return 0.;
+  const double x = sqrt(v * v - v_climb * v_climb) / v0;
+  return -expm1(-x) - x * exp(-x);
+}
+
+/**
+ * @brief Mean of v_L^2 / 2 over the PDF. E[v_ref^2] = 6 v0^2, so this is
+ * 3 v0^2 + v_climb^2 / 2.
+ */
+static inline double wind_warm_pdf_mean_kinetic(const double v0,
+                                                const double v_climb) {
+  return 3. * v0 * v0 + 0.5 * v_climb * v_climb;
+}
+
+/**
+ * @brief Fraction of the launched mass with v_ref > v_extra, i.e. that a
+ * ballistic flight carries to the height where it has lost a further speed
+ * v_extra beyond the reference height: (1 + v_extra/v0) exp(-v_extra/v0).
+ */
+static inline double wind_warm_pdf_survival(const double v_extra,
+                                            const double v0) {
+  if (v_extra <= 0.) return 1.;
+  return (1. + v_extra / v0) * exp(-v_extra / v0);
+}
+
 /**
  * @brief Has a particle launched along sign * n passed its apex, i.e. has
  * its velocity no positive component along sign * n?

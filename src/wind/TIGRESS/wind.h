@@ -140,6 +140,7 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.decoupled = decoupled ? 1 : 0;
   p->wind_data.launch_Sigma_SFR = -1.f;
   p->wind_data.launch_eta_M = -1.f;
+  p->wind_data.launch_kick = -1.f;
 
   /* WindPhases and WindCREnergies are read from the ICs only for particles
    * decoupled there; a hand-decoupled particle without a phase is hot */
@@ -241,7 +242,15 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   wind_loadings(props, xp, &eta_M, &eta_E);
   const double eta_M_warm = wind_warm_eta_M(props, xp);
   if (phase == 2) {
-    dv = props->warm_v;
+    if (props->warm_speed_pdf) {
+      const double u1 = random_unit_interval(p->id, ti_current,
+                                             random_number_wind_warm_speed_1);
+      const double u2 = random_unit_interval(p->id, ti_current,
+                                             random_number_wind_warm_speed_2);
+      dv = wind_warm_pdf_speed(u1, u2, props->warm_pdf_v0, props->warm_climb_v);
+    } else {
+      dv = props->warm_v;
+    }
     u_w = props->warm_u;
   } else {
     wind_launch_kinematics(props->u_star, eta_M, eta_E, props->f_kin,
@@ -293,8 +302,10 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   p->wind_data.cr_energy = E_cr;
   p->wind_data.launch_Sigma_SFR = xp->sf_data.Sigma_SFR;
   p->wind_data.launch_eta_M = phase == 2 ? eta_M_warm : eta_M;
+  p->wind_data.launch_kick = dv;
 
   const double m = hydro_get_mass(p);
+  const double E_kick = m * (0.5 * dv * dv + hydro_gamma * u_w);
   atomic_add_d(&wind_global_stats.n_launch, 1.);
   atomic_add_d(&wind_global_stats.m_launch, m);
   atomic_add_d(&wind_global_stats.E_kin_launch, m * p->wind_data.launch_e_kin);
@@ -306,10 +317,14 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
     atomic_add_d(&wind_global_stats.n_launch_warm, 1.);
     atomic_add_d(&wind_global_stats.m_launch_warm, m);
     atomic_add_d(&wind_global_stats.m_over_eta_warm, m / eta_M_warm);
+    atomic_add_d(&wind_global_stats.E_launch_warm, E_kick);
+    atomic_add_d(&wind_global_stats.p_launch_warm, m * dv);
   } else {
     atomic_add_d(&wind_global_stats.n_launch_hot, 1.);
     atomic_add_d(&wind_global_stats.m_launch_hot, m);
     atomic_add_d(&wind_global_stats.m_over_eta_hot, m / eta_M);
+    atomic_add_d(&wind_global_stats.E_launch_hot, E_kick);
+    atomic_add_d(&wind_global_stats.p_launch_hot, m * dv);
   }
   atomic_add_d(&wind_global_stats.E_cr_launch, E_cr);
 }

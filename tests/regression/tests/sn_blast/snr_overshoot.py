@@ -15,7 +15,12 @@ SWIFT-star-formation/papers-part12-hopkins.md Sec. 2.3, tests 1 and 3):
          rate proportional to beta, so both bounds double);
   adiab0 no cooling, SPHENIX artificial conduction off;
   visc05, visc2  cooling, SPHENIX viscosity_alpha_max halved (1) and doubled (4);
-  adiab_visc05, adiab_visc2  the same without cooling.
+  adiab_visc05, adiab_visc2  the same without cooling;
+  diffforce, adiab_diffforce  SPHENIX conduction forced to alpha_D = 1 everywhere (needs a
+         build without the viscosity-based cap on alpha_D, branch sphenix-nolimiter).
+
+Resolution from SWIFT_REG_SNR_N: 64 (default; 64^3 glass, 2.1 Msun), 32 (32^3 glass,
+16.8 Msun) or 128 (the 64^3 glass tiled 2x2x2, 0.26 Msun, 2.1e6 particles).
 
 SWIFT_REG_SNR_VARIANTS selects a comma-separated subset (default: all for SPHENIX;
 the diffusion and viscosity variants need SPHENIX). Outputs are log-spaced from 2 kyr to 1.5 Myr
@@ -46,9 +51,15 @@ VARIANTS = {"cool": {}, "adiab": {},
             "adiab0": {"diffusion_alpha_max": 0.0},
             "visc05": {"viscosity_alpha_max": 1.0}, "visc2": {"viscosity_alpha_max": 4.0},
             "adiab_visc05": {"viscosity_alpha_max": 1.0},
-            "adiab_visc2": {"viscosity_alpha_max": 4.0}}
+            "adiab_visc2": {"viscosity_alpha_max": 4.0},
+            "diffforce": {"diffusion_alpha": 1.0, "diffusion_alpha_min": 1.0,
+                          "diffusion_alpha_max": 1.0},
+            "adiab_diffforce": {"diffusion_alpha": 1.0, "diffusion_alpha_min": 1.0,
+                                "diffusion_alpha_max": 1.0}}
 _only = os.environ.get("SWIFT_REG_SNR_VARIANTS")
 RUNS = {k: v for k, v in VARIANTS.items() if not _only or k in _only.split(",")}
+N_RES = int(os.environ.get("SWIFT_REG_SNR_N", "64"))
+GLASS, TILE = {32: (32, 1), 64: (64, 1), 128: (64, 2)}[N_RES]
 
 
 def sedov_momentum(t_yr, rho0, e=c.E_SN, gamma=5.0 / 3.0):
@@ -64,11 +75,12 @@ def sedov_momentum(t_yr, rho0, e=c.E_SN, gamma=5.0 / 3.0):
 def run(ctx):
     ctx.table("coolingtables")
     from swiftreg import data
-    glass = data.glass(64, ctx.data_dir, log=ctx.log)
+    glass = data.glass(GLASS, ctx.data_dir, log=ctx.log)
     times = np.logspace(np.log10(2.0452e-6), np.log10(T_END), 80)
     for name, sph in RUNS.items():
         os.makedirs(ctx.path(name))
-        _, rho0 = c.blast_ics(ctx.path(name, "ics.hdf5"), 64, BOX, NH, T, glass_file=glass)
+        _, rho0 = c.blast_ics(ctx.path(name, "ics.hdf5"), N_RES, BOX, NH, T, glass_file=glass,
+                              glass_tile=TILE)
         ctx.info["rho0"] = rho0
         np.savetxt(ctx.path(name, "output_list.txt"), times, header="Time", comments="# ")
         p = params.eagle_base("ics.hdf5", T_END, ctx.data_dir, 1.0, dt_max=1e-6)

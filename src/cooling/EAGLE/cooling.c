@@ -493,6 +493,11 @@ void cooling_cool_part(const struct phys_const *phys_const,
   } else {
 
     /* Otherwise, go the bisection route. */
+    if (n_H_cgs > 100. && u_0_cgs > 1e13)
+      message("DEBUG dense cooling: id %lld n_H %g rho %g h %g m %g bin %d u %g "
+              "u_full %g dt %g dec %d",
+              p->id, n_H_cgs, p->rho, p->h, p->mass, p->time_bin, p->u,
+              xp->u_full, dt, p->wind_data.decoupled);
     u_final_cgs =
         bisection_iter(u_0_cgs, n_H_cgs, cosmo->z, n_H_index, d_n_H, He_index,
                        d_He, Lambda_He_reion_cgs, ratefact_cgs, cooling,

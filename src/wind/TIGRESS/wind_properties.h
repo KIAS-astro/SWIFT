@@ -126,6 +126,11 @@ struct wind_global_stats {
   /*! Recouplings by criterion (index: enum wind_recoupling_reason) and
    * merges into a host */
   double n_reason[4], n_merged;
+  /*! Energy budget terms: kinetic plus internal energy of the particles
+   * before their launch; potential energy change m_w (Phi_host - Phi_wind)
+   * of the merges; radiated energy carried by merged particles to their
+   * hosts */
+  double E_pre_launch, E_pot_merge, E_rad_merge;
 };
 
 extern struct wind_global_stats wind_global_stats;

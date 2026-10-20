@@ -40,6 +40,9 @@
 #include "physical_constants.h"
 #include "restart.h"
 #include "space.h"
+#include "cooling.h"
+#include "gravity.h"
+#include "potential.h"
 #include "timestep_sync_part.h"
 #include "units.h"
 #include "wind.h"
@@ -236,7 +239,7 @@ void wind_struct_restore(struct wind_props *props, FILE *stream) {
  * @brief Print the totals of all ranks as one log line.
  */
 void wind_print_stats(const struct engine *e) {
-  double s[12] = {wind_global_stats.n_launch,     wind_global_stats.m_launch,
+  double s[15] = {wind_global_stats.n_launch,     wind_global_stats.m_launch,
                   wind_global_stats.E_kin_launch, wind_global_stats.E_th_launch,
                   wind_global_stats.n_recouple,   wind_global_stats.m_recouple,
                   wind_global_stats.E_kin_recouple,
@@ -244,10 +247,13 @@ void wind_print_stats(const struct engine *e) {
                   wind_global_stats.n_reason[wind_reason_distance],
                   wind_global_stats.n_reason[wind_reason_density],
                   wind_global_stats.n_reason[wind_reason_time],
-                  wind_global_stats.n_merged};
+                  wind_global_stats.n_merged,
+                  wind_global_stats.E_pre_launch,
+                  wind_global_stats.E_pot_merge,
+                  wind_global_stats.E_rad_merge};
 #ifdef WITH_MPI
-  double r[12];
-  MPI_Reduce(s, r, 12, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  double r[15];
+  MPI_Reduce(s, r, 15, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   memcpy(s, r, sizeof(s));
 #endif
   if (e->nodeID == 0) {
@@ -261,6 +267,13 @@ void wind_print_stats(const struct engine *e) {
         "Wind recouplings by criterion: distance %.0f density %.0f time %.0f; "
         "merged into a host %.0f",
         s[8], s[9], s[10], s[11]);
+    message(
+        "Wind energy budget: before launch E_kin+E_int=%.6e; merges: potential "
+        "energy change %.6e, radiated energy passed to hosts %.6e; removed "
+        "particles: radiated energy %.6e, gas internal energy turned into stars "
+        "%.6e, energy leaving the box %.6e (internal units)",
+        s[12], s[13], s[14], cell_budget_radiated_removed, cell_budget_u_to_stars,
+        cell_budget_exit_energy);
   }
 }
 
@@ -378,6 +391,28 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
   wind_global_stats.E_kin_recouple += mw * ekw;
   wind_global_stats.E_th_recouple += mw * uw;
   wind_global_stats.n_merged += 1.;
+
+  /* Energy budget: the wind particle's mass moves to the host's position,
+   * which changes the potential energy (self-gravity potential as the
+   * statistics count it, plus the external potential); and its radiated
+   * energy, summed by the statistics over particles, passes to the host
+   * instead of vanishing with it. Positions are those of the last drift. */
+  if (p->gpart != NULL && h->gpart != NULL) {
+    const double phi_w =
+        gravity_get_physical_potential(p->gpart, cosmo) +
+        external_gravity_get_potential_energy(e->time, e->external_potential,
+                                              e->physical_constants, p->gpart);
+    const double phi_h =
+        gravity_get_physical_potential(h->gpart, cosmo) +
+        external_gravity_get_potential_energy(e->time, e->external_potential,
+                                              e->physical_constants, h->gpart);
+    wind_global_stats.E_pot_merge += mw * (phi_h - phi_w);
+  }
+#if defined(COOLING_EAGLE) || defined(COOLING_PS2020)
+  wind_global_stats.E_rad_merge += xp->cooling_data.radiated_energy;
+  hx->cooling_data.radiated_energy += xp->cooling_data.radiated_energy;
+  xp->cooling_data.radiated_energy = 0.;
+#endif
 
   /* An active host may be between hydro_init_part and its density loop (at a
    * rebuild or with --drift-all, everything is drifted before this pass): its

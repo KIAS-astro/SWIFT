@@ -27,10 +27,20 @@
 
 /* Local headers. */
 #include "active.h"
+#include "cooling.h"
 #include "engine.h"
 #include "hydro.h"
 #include "memswap.h"
 #include "sink_properties.h"
+
+/* Energy-budget diagnostics (single rank): the radiated energy that the
+ * statistics stop counting when a gas particle is removed or turned into a
+ * star or dark matter, the internal energy of gas turned into stars, and
+ * the kinetic, internal and potential energy of gas that leaves a
+ * non-periodic box (accumulated in cell_drift.c). */
+double cell_budget_radiated_removed = 0.;
+double cell_budget_u_to_stars = 0.;
+double cell_budget_exit_energy = 0.;
 
 /**
  * @brief Recursively update the pointer and counter for #spart after the
@@ -628,6 +638,8 @@ void cell_remove_part(const struct engine *e, struct cell *c, struct part *p,
   /* Don't remove a particle twice */
   if (p->time_bin == time_bin_inhibited) return;
 
+  atomic_add_d(&cell_budget_radiated_removed, cooling_get_radiated_energy(xp));
+
   /* Mark the particle as inhibited */
   p->time_bin = time_bin_inhibited;
   /* Mark the RT time bin as inhibited as well,
@@ -831,6 +843,11 @@ struct gpart *cell_convert_part_to_gpart(const struct engine *e, struct cell *c,
 
   /* Get a handle */
   struct gpart *gp = p->gpart;
+
+  atomic_add_d(&cell_budget_radiated_removed, cooling_get_radiated_energy(xp));
+  atomic_add_d(&cell_budget_u_to_stars,
+               hydro_get_mass(p) *
+                   hydro_get_physical_internal_energy(p, xp, e->cosmology));
 
   /* Mark the particle as inhibited */
   p->time_bin = time_bin_inhibited;

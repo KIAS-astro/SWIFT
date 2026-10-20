@@ -187,6 +187,9 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                const double time,
                                const integertime_t ti_current) {
 
+  /* Kinetic plus internal energy before the launch, for the energy budget */
+  const double e_pre = wind_specific_kinetic(xp) + xp->u_full;
+
   double eta_M, eta_E, dv, u_w;
   wind_loadings(props, xp, &eta_M, &eta_E);
   wind_launch_kinematics(props->u_star, eta_M, eta_E, props->f_kin,
@@ -228,6 +231,7 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   atomic_add_d(&wind_global_stats.m_launch, m);
   atomic_add_d(&wind_global_stats.E_kin_launch, m * p->wind_data.launch_e_kin);
   atomic_add_d(&wind_global_stats.E_th_launch, m * p->wind_data.launch_e_th);
+  atomic_add_d(&wind_global_stats.E_pre_launch, m * e_pre);
 }
 
 /**

@@ -29,6 +29,9 @@
 #include "active.h"
 #include "drift.h"
 #include "feedback.h"
+#include "gravity.h"
+#include "hydro.h"
+#include "potential.h"
 #include "lightcone/lightcone.h"
 #include "lightcone/lightcone_array.h"
 #include "multipole.h"
@@ -315,6 +318,22 @@ void cell_drift_part(struct cell *c, const struct engine *e, int force,
 
             /* One last action before death? */
             hydro_remove_part(p, xp, e->time);
+
+            /* Energy-budget diagnostic: the energy that leaves with it */
+            {
+              const double m = hydro_get_mass(p);
+              double e_p = m * hydro_get_physical_internal_energy(
+                                   p, xp, e->cosmology);
+              for (int d = 0; d < 3; d++)
+                e_p += 0.5 * m * xp->v_full[d] * xp->v_full[d];
+              if (p->gpart != NULL)
+                e_p += m * (gravity_get_physical_potential(p->gpart,
+                                                           e->cosmology) +
+                            external_gravity_get_potential_energy(
+                                e->time, e->external_potential,
+                                e->physical_constants, p->gpart));
+              cell_budget_exit_energy += e_p;
+            }
 
             /* Remove the particle entirely */
             cell_remove_part(e, c, p, xp);

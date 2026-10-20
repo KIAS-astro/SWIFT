@@ -51,8 +51,10 @@ JITTER = 0.3  # of the lattice spacing, uniform in each coordinate
 T_JIT = 3.0 * T_CROSS
 
 # Measured 2026-10-20 (SPHENIX): R -> (rms P error at t = 0, peak rms
-# speed / c_g in the first crossing)
-SPH_REFERENCE = {3: (0.599, 0.164), 10: (2.56, 0.353), 30: (8.22, 0.419)}
+# speed / c_g in the first crossing). The R = 30 speed was 0.385, 0.419 and 0.587 in
+# three runs of the same seeded ICs: multithreaded SPHENIX is not bit-reproducible
+# and the lattice instability starts at a different time; the guard uses the largest
+SPH_REFERENCE = {3: (0.599, 0.164), 10: (2.56, 0.353), 30: (8.22, 0.587)}
 
 
 def _ics(path, R, jitter=0.0):

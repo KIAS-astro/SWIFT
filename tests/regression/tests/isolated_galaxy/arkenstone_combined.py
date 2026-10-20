@@ -16,6 +16,8 @@ fits at Sigma_SFR, enthalpy convention):
             (wind-design.md Sec. 10.3);
   L_wv60    the same with v0 = 60 km/s at every Sigma_SFR (2-3 times the K20a
             scale; a fast-tail sensitivity run);
+  L_wk20a1k L_wk20a with the warm loading through K26 mhd at 1 kpc (norm -0.495),
+            the height of the PDF, instead of at 2 kpc;
 and nowind. Warm loading: the K20 set, 10^-0.961 Sigma_SFR^-0.44 (K26 mhd at 2 kpc);
 1e4 K. Recoupling: hot at max(10 kpc, 2 kernel supports) or 50 Myr; warm at a
 height of max(1.5 kpc, 2 kernel supports) along the launch direction, 50 Myr or the
@@ -60,6 +62,9 @@ BUILDS = {"ark": va.BUILDS["ark"] + ([f"--with-random-seed={SEED}"] if SEED else
 T_END_MYR = float(os.environ.get("SWIFT_REG_ARK_TEND_MYR", "2500"))
 
 V0, V_CLIMB = 60.0, 60.5  # km/s
+# Warm loading through K26 mhd at 1 kpc (3.8 at Sigma_SFR = 3.6e-3), the height of
+# the K20a PDF: log10(3.8) + 0.44 log10(3.6e-3)
+WARM_NORM_1KPC = -0.495
 D_REC_HOT, T_REC = 10.0, 50.0  # kpc, Myr
 GAMMA = 5.0 / 3.0
 U_WARM = units.u_from_T(1e4, 0.6)
@@ -77,6 +82,9 @@ WARM = {
     "wv60": {"warm_phase": 1, "warm_launch_speed_pdf": "K20a", "warm_pdf_v0_kms": V0,
              "warm_pdf_slope": 0.0, "warm_pdf_floor_kms": 0.0,
              "warm_climb_speed_kms": V_CLIMB},
+    "wk20a1k": {"warm_phase": 1, "warm_launch_speed_pdf": "K20a", "warm_pdf_v0_kms": V0,
+                "warm_climb_speed_kms": V_CLIMB,
+                "warm_eta_M_log10_norm": WARM_NORM_1KPC},
 }
 WINDS = {"nowind": {"loading_model": "none"}}
 for _l, _h in HOT.items():

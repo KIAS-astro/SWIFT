@@ -1,6 +1,7 @@
 """Configure and build SWIFT out of tree, one cached build per flag set.
 
-A build directory is named by a hash of its configure flags. The first
+A build directory is named by a hash of the source tree's path and the
+configure flags, so two worktrees never share a build. The first
 request configures and builds; later requests only run make, which
 rebuilds what changed because automake tracks header dependencies.
 The source tree is never written to.
@@ -22,8 +23,8 @@ def source_dir():
     return os.path.normpath(os.path.join(here, "..", "..", ".."))
 
 
-def _key(flags):
-    text = json.dumps(sorted(flags))
+def _key(src, flags):
+    text = json.dumps([src] + sorted(flags))
     return hashlib.sha1(text.encode()).hexdigest()[:12]
 
 
@@ -41,10 +42,10 @@ def build(flags, build_root, jobs=8, log=print):
             "refused by configure. Run 'make distclean' there first."
         )
 
-    bdir = os.path.join(build_root, _key(flags))
+    bdir = os.path.join(build_root, _key(src, flags))
     os.makedirs(bdir, exist_ok=True)
     with open(os.path.join(bdir, "flags.json"), "w") as f:
-        json.dump(flags, f, indent=1)
+        json.dump({"source": src, "flags": flags}, f, indent=1)
 
     if not os.path.exists(os.path.join(bdir, "config.status")):
         log(f"  configure {os.path.basename(bdir)}: {' '.join(flags)}")

@@ -67,6 +67,36 @@ __attribute__((always_inline)) INLINE static void hydro_velocities_end_force(
 }
 
 /**
+ * @brief Move velocity changes made outside the hydro scheme into the momentum.
+ *
+ * Feedback (kinetic kicks, the momentum of enrichment ejecta) changes
+ * xp->v_full only, but hydro_velocities_set() resets v_full from the
+ * conserved momentum at every kick. Between two kicks of a particle, v_full
+ * changes only by the gravity (and zero hydro) kick that kick_part() has
+ * just applied, so whatever is left over came from outside and is added to
+ * the momentum here.
+ *
+ * @param p The particle to act upon.
+ * @param xp The extended particle data to act upon.
+ * @param dv_kick Velocity change applied by kick_part() before this call.
+ */
+__attribute__((always_inline)) INLINE static void
+hydro_velocities_absorb_external_kick(struct part *restrict p,
+                                      const struct xpart *restrict xp,
+                                      const float *dv_kick) {
+
+  const float m = p->conserved.mass;
+  if (m <= 0.0f || p->rho <= 0.0f) return;
+
+  const float m_inv = 1.0f / m;
+  for (int k = 0; k < 3; k++) {
+    const float dv =
+        xp->v_full[k] - dv_kick[k] - p->conserved.momentum[k] * m_inv;
+    p->conserved.momentum[k] += m * dv;
+  }
+}
+
+/**
  * @brief Set the velocity of a GIZMO particle, based on the values of its
  * primitive variables and the geometry of its mesh-free "cell".
  *

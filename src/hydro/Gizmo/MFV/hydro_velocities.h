@@ -75,6 +75,35 @@ __attribute__((always_inline)) INLINE static void hydro_velocities_end_force(
 }
 
 /**
+ * @brief Move velocity changes made outside the hydro scheme into the momentum.
+ *
+ * Without GIZMO_FIX_PARTICLES and GIZMO_STEER_MOTION, hydro_velocities_set()
+ * sets v_full to momentum / mass, as in MFM, so a change of v_full that is
+ * not the kick_part() kick came from outside and is moved into the momentum.
+ * With either option v_full is not the fluid velocity and nothing is done.
+ *
+ * @param p The particle to act upon.
+ * @param xp The extended particle data to act upon.
+ * @param dv_kick Velocity change applied by kick_part() before this call.
+ */
+__attribute__((always_inline)) INLINE static void
+hydro_velocities_absorb_external_kick(struct part *restrict p,
+                                      const struct xpart *restrict xp,
+                                      const float *dv_kick) {
+#if !defined(GIZMO_FIX_PARTICLES) && !defined(GIZMO_STEER_MOTION)
+  const float m = p->conserved.mass;
+  if (m <= 0.0f || p->rho <= 0.0f) return;
+
+  const float m_inv = 1.0f / m;
+  for (int k = 0; k < 3; k++) {
+    const float dv =
+        xp->v_full[k] - dv_kick[k] - p->conserved.momentum[k] * m_inv;
+    p->conserved.momentum[k] += m * dv;
+  }
+#endif
+}
+
+/**
  * @brief Set the velocity of a GIZMO particle, based on the values of its
  * primitive variables and the geometry of its mesh-free "cell".
  *

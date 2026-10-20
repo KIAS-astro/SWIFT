@@ -549,8 +549,6 @@ __attribute__((always_inline)) INLINE static void hydro_predict_extra(
   W[3] = Wprime[3];
   W[4] = Wprime[4];
 
-  // MATTHIEU: Apply the entropy floor here.
-
   /* add the gravitational contribution to the fluid velocity drift */
   /* (MFV only) */
   hydro_gizmo_mfv_extra_velocity_drift(p->v, p->fluid_v, xp->v_full, xp->a_grav,
@@ -560,6 +558,11 @@ __attribute__((always_inline)) INLINE static void hydro_predict_extra(
                                   W[4]);
 
   hydro_part_set_primitive_variables(p, W);
+
+  /* Keep the predicted pressure on or above the entropy floor, evaluated at
+   * the predicted density */
+  const float floor_A = entropy_floor(p, cosmo, floor_props);
+  p->P = max(p->P, gas_pressure_from_entropy(p->rho, floor_A));
 }
 
 /**
@@ -603,6 +606,16 @@ __attribute__((always_inline)) INLINE static void hydro_kick_extra(
     float dt_grav_mesh, float dt_hydro, float dt_kick_corr,
     const struct cosmology *cosmo, const struct hydro_props *hydro_props,
     const struct entropy_floor_properties *floor_props) {
+
+  /* Velocity change kick_part() applied to v_full before calling us. */
+  float dv_kick[3] = {p->a_hydro[0] * dt_hydro, p->a_hydro[1] * dt_hydro,
+                      p->a_hydro[2] * dt_hydro};
+  if (p->gpart) {
+    for (int k = 0; k < 3; k++)
+      dv_kick[k] += p->gpart->a_grav[k] * dt_grav +
+                    p->gpart->a_grav_mesh[k] * dt_grav_mesh;
+  }
+  hydro_velocities_absorb_external_kick(p, xp, dv_kick);
 
   /* Add gravity. We only do this if we have gravity activated. */
   if (p->gpart) {
@@ -683,15 +696,17 @@ __attribute__((always_inline)) INLINE static void hydro_kick_extra(
 #endif
 #endif
 
-  /* Apply the minimal energy limit */
+  /* Apply the minimal energy limit and the entropy floor */
   const float min_energy =
       hydro_props->minimal_internal_energy / cosmo->a_factor_internal_energy;
-  if (p->conserved.energy < min_energy * p->conserved.mass) {
-    p->conserved.energy = min_energy * p->conserved.mass;
+  const float floor_A = entropy_floor(p, cosmo, floor_props);
+  const float floor_u = gas_internal_energy_from_entropy(p->rho, floor_A);
+  const float energy_min = max(min_energy, floor_u);
+  if (p->conserved.energy < energy_min * p->conserved.mass) {
+    p->conserved.energy = energy_min * p->conserved.mass;
     p->flux.energy = 0.0f;
+    p->P = gas_pressure_from_internal_energy(p->rho, energy_min);
   }
-
-  // MATTHIEU: Apply the entropy floor here.
 
   gizmo_check_physical_quantities(
       "mass", "energy", p->conserved.mass, p->conserved.momentum[0],

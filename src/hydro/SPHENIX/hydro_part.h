@@ -120,6 +120,10 @@ struct part {
   /*! Particle acceleration. */
   float a_hydro[3];
 
+  /*! DEBUG (arkenstone-debug): own-pressure, neighbours' pressure and
+   * viscosity parts of a_hydro, and the density at the force calculation */
+  float dbg_a_own[3], dbg_a_ngb[3], dbg_a_visc[3], dbg_rho_force;
+
   /*! Particle mass. */
   float mass;
 

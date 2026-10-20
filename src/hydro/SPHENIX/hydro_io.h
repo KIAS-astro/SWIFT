@@ -192,7 +192,7 @@ INLINE static void hydro_write_particles(const struct part *parts,
                                          struct io_props *list,
                                          int *num_fields) {
 
-  *num_fields = 19;
+  *num_fields = 23;
 
   /* List what we want to write */
   list[0] = io_make_output_field_convert_part(
@@ -289,6 +289,18 @@ INLINE static void hydro_write_particles(const struct part *parts,
   list[18] = io_make_output_field("SoundSpeeds", FLOAT, 1, UNIT_CONV_SPEED, 0.f,
                                   parts, force.soundspeed,
                                   "DEBUG: sound speed used in the force loop");
+  list[19] = io_make_output_field("HydroAccelerationsOwn", FLOAT, 3,
+                                  UNIT_CONV_ACCELERATION, 1.f, parts, dbg_a_own,
+                                  "DEBUG: own-pressure part of a_hydro");
+  list[20] = io_make_output_field("HydroAccelerationsNgb", FLOAT, 3,
+                                  UNIT_CONV_ACCELERATION, 1.f, parts, dbg_a_ngb,
+                                  "DEBUG: neighbours' pressure part of a_hydro");
+  list[21] = io_make_output_field("HydroAccelerationsVisc", FLOAT, 3,
+                                  UNIT_CONV_ACCELERATION, 1.f, parts, dbg_a_visc,
+                                  "DEBUG: viscosity part of a_hydro");
+  list[22] = io_make_output_field("DensitiesAtForce", FLOAT, 1, UNIT_CONV_DENSITY,
+                                  -3.f, parts, dbg_rho_force,
+                                  "DEBUG: density when a_hydro was last reset");
 }
 
 /**

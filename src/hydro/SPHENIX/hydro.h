@@ -965,6 +965,12 @@ __attribute__((always_inline)) INLINE static void hydro_reset_acceleration(
   p->a_hydro[0] = 0.0f;
   p->a_hydro[1] = 0.0f;
   p->a_hydro[2] = 0.0f;
+  for (int k = 0; k < 3; k++) {
+    p->dbg_a_own[k] = 0.f;
+    p->dbg_a_ngb[k] = 0.f;
+    p->dbg_a_visc[k] = 0.f;
+  }
+  p->dbg_rho_force = p->rho;
 
   /* Reset the time derivatives. */
   p->u_dt = 0.0f;

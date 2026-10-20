@@ -450,6 +450,16 @@ __attribute__((always_inline)) INLINE static void runner_iact_force(
   pj->a_hydro[1] += mi * acc * dx[1];
   pj->a_hydro[2] += mi * acc * dx[2];
 
+  /* DEBUG (arkenstone-debug): split of a_hydro */
+  for (int k = 0; k < 3; k++) {
+    pi->dbg_a_own[k] -= mj * P_over_rho2_i * wi_dr * r_inv * dx[k];
+    pi->dbg_a_ngb[k] -= mj * P_over_rho2_j * wj_dr * r_inv * dx[k];
+    pi->dbg_a_visc[k] -= mj * visc_acc_term * dx[k];
+    pj->dbg_a_own[k] += mi * P_over_rho2_j * wj_dr * r_inv * dx[k];
+    pj->dbg_a_ngb[k] += mi * P_over_rho2_i * wi_dr * r_inv * dx[k];
+    pj->dbg_a_visc[k] += mi * visc_acc_term * dx[k];
+  }
+
   /* Get the time derivative for u. */
   const float sph_du_term_i = P_over_rho2_i * dvdr * r_inv * wi_dr;
   const float sph_du_term_j = P_over_rho2_j * dvdr * r_inv * wj_dr;
@@ -594,6 +604,13 @@ __attribute__((always_inline)) INLINE static void runner_iact_nonsym_force(
   pi->a_hydro[0] -= mj * acc * dx[0];
   pi->a_hydro[1] -= mj * acc * dx[1];
   pi->a_hydro[2] -= mj * acc * dx[2];
+
+  /* DEBUG (arkenstone-debug): split of a_hydro */
+  for (int k = 0; k < 3; k++) {
+    pi->dbg_a_own[k] -= mj * P_over_rho2_i * wi_dr * r_inv * dx[k];
+    pi->dbg_a_ngb[k] -= mj * P_over_rho2_j * wj_dr * r_inv * dx[k];
+    pi->dbg_a_visc[k] -= mj * visc_acc_term * dx[k];
+  }
 
   /* Get the time derivative for u. */
   const float sph_du_term_i = P_over_rho2_i * dvdr * r_inv * wi_dr;

@@ -409,12 +409,28 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     if (h->gpart != NULL) h->gpart->v_full[k] = v[k];
   }
   hydro_set_physical_internal_energy(h, hx, cosmo, u);
-  hydro_set_drifted_physical_internal_energy(h, cosmo, NULL, u);
-  hydro_set_v_sig_based_on_velocity_kick(h, cosmo, sqrt(dv2));
 
-  /* The host may be inactive: put it on the current step */
-  timestep_sync_part(h);
-  cell_activate_sync_part(hc, &e->sched);
+  if (h->time_bin <= e->max_active_bin) {
+    /* An active host may be between hydro_init_part (at a rebuild or with
+     * --drift-all, everything is drifted before this pass) and its density
+     * loop: in
+     * SPHENIX the force fields (pressure, sound speed) share a union with the
+     * density sums, so the feedback setters below would write into those sums
+     * (with rho = 0 they write NaN). Set only the drifted energy; the ghost
+     * recomputes pressure, sound speed and v_sig this step. */
+#if defined(SPHENIX_SPH)
+    hydro_set_init_internal_energy(h, u / cosmo->a_factor_internal_energy);
+#else
+    error("Wind: merging into an active host is implemented for SPHENIX only");
+#endif
+  } else {
+    hydro_set_drifted_physical_internal_energy(h, cosmo, NULL, u);
+    hydro_set_v_sig_based_on_velocity_kick(h, cosmo, sqrt(dv2));
+
+    /* Put the inactive host on the current step */
+    timestep_sync_part(h);
+    cell_activate_sync_part(hc, &e->sched);
+  }
 
   /* The particle's mass and gravity are now the host's */
   if (p->gpart != NULL) p->gpart->mass = 0.f;

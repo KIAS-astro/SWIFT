@@ -83,7 +83,14 @@ INLINE static int wind_should_recouple(const struct part *p,
 INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                                  const struct wind_props *props,
                                  const struct cosmology *cosmo,
-                                 const double time) {}
+                                 const double time, const int reason) {}
+
+INLINE static int wind_recouple_or_defer(struct part *p, struct xpart *xp,
+                                         const struct wind_props *props,
+                                         const struct cosmology *cosmo,
+                                         const double time) {
+  return 0;
+}
 
 __attribute__((always_inline)) INLINE static void wind_drift_part(
     struct part *p, const struct xpart *xp, const double dt_drift) {}

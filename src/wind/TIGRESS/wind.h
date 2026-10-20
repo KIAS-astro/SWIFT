@@ -136,8 +136,11 @@ INLINE static void wind_first_init_part(struct part *p, struct xpart *xp,
   p->wind_data.recouple_e_th = -1.f;
   p->wind_data.recouple_distance = -1.f;
   p->wind_data.d_rec = wind_recoupling_distance(p, props);
+  p->wind_data.rho_ambient = -1.f;
   p->wind_data.launch_count = 0;
   p->wind_data.decoupled = decoupled ? 1 : 0;
+  p->wind_data.recouple_reason = wind_reason_none;
+  p->wind_data.recouple_pending = wind_reason_none;
   p->wind_data.launch_Sigma_SFR = -1.f;
   p->wind_data.launch_eta_M = -1.f;
   p->wind_data.launch_kick = -1.f;
@@ -295,6 +298,8 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
   }
   p->wind_data.launch_e_kin = wind_specific_kinetic(xp);
   p->wind_data.launch_e_th = xp->u_full;
+  p->wind_data.rho_ambient = -1.f;
+  p->wind_data.recouple_pending = wind_reason_none;
   p->wind_data.d_rec =
       phase == 2 ? fmax(props->warm_d_rec,
                         props->d_rec_kernel_factor * kernel_gamma * p->h)
@@ -363,19 +368,36 @@ __attribute__((always_inline)) INLINE static double wind_recoupling_measure(
 }
 
 /**
- * @brief Should a decoupled particle recouple (WD5)? A warm particle also
- * recouples at its apex (wind-design.md Sec. 10.3).
+ * @brief Should a decoupled particle recouple (WD5)?
+ *
+ * Hot phase, distance mode: after max(d_rec, factor x kernel support at
+ * launch). Hot phase, density mode: once the ambient density computed at the
+ * start of the step (wind_engine_pass) is below rho_rec. Warm phase, either
+ * mode: at its apex or after the height d_rec along the launch direction
+ * (wind-design.md Sec. 10.3). Every particle: after t_rec. A particle already
+ * waiting to be merged into a host is not tested again.
+ *
+ * @return The criterion met (enum wind_recoupling_reason), 0 if none.
  */
 INLINE static int wind_should_recouple(const struct part *p,
                                        const struct xpart *xp,
                                        const struct wind_props *props,
                                        const double time) {
-  if (!p->wind_data.decoupled) return 0;
-  if (p->wind_data.phase == 2 &&
+  if (!p->wind_data.decoupled || p->wind_data.recouple_pending)
+    return wind_reason_none;
+  const int warm = p->wind_data.phase == 2;
+  if (warm &&
       wind_past_apex(xp->v_full, props->normal, p->wind_data.launch_sign))
-    return 1;
-  return wind_recoupling_measure(p, props) >= p->wind_data.d_rec ||
-         time - p->wind_data.launch_time >= props->t_rec;
+    return wind_reason_apex;
+  if (time - p->wind_data.launch_time >= props->t_rec) return wind_reason_time;
+  if (warm || props->mode == wind_recouple_distance) {
+    if (wind_recoupling_measure(p, props) >= p->wind_data.d_rec)
+      return wind_reason_distance;
+  } else {
+    const float rho = p->wind_data.rho_ambient;
+    if (rho >= 0.f && rho < props->rho_rec) return wind_reason_density;
+  }
+  return wind_reason_none;
 }
 
 /**
@@ -387,13 +409,15 @@ INLINE static int wind_should_recouple(const struct part *p,
 INLINE static void wind_recouple(struct part *p, struct xpart *xp,
                                  const struct wind_props *props,
                                  const struct cosmology *cosmo,
-                                 const double time) {
+                                 const double time, const int reason) {
 
-  if (p->wind_data.phase == 2 &&
-      wind_past_apex(xp->v_full, props->normal, p->wind_data.launch_sign))
+  if (reason == wind_reason_apex)
     atomic_add_d(&wind_global_stats.n_recouple_apex, 1.);
 
   p->wind_data.decoupled = 0;
+  p->wind_data.recouple_reason = reason;
+  p->wind_data.recouple_pending = wind_reason_none;
+  atomic_add_d(&wind_global_stats.n_reason[reason], 1.);
   p->wind_data.recouple_time = time;
   p->wind_data.recouple_distance = wind_recoupling_measure(p, props);
   p->wind_data.recouple_e_kin = wind_specific_kinetic(xp);
@@ -430,6 +454,31 @@ INLINE static void wind_recouple(struct part *p, struct xpart *xp,
 }
 
 /**
+ * @brief Test a decoupled particle at the end of its step and recouple it.
+ *
+ * With deposit into a host a hot particle stays decoupled and is marked; the
+ * merge happens in wind_engine_pass at the start of the next step, where
+ * the neighbours are accessible. A warm particle always rejoins as itself,
+ * so that it keeps rising after recoupling and can form a fountain
+ * (wind-design.md Sec. 10.3).
+ *
+ * @return 1 if the particle rejoined the hydro now, 0 otherwise.
+ */
+INLINE static int wind_recouple_or_defer(struct part *p, struct xpart *xp,
+                                         const struct wind_props *props,
+                                         const struct cosmology *cosmo,
+                                         const double time) {
+  const int reason = wind_should_recouple(p, xp, props, time);
+  if (reason == wind_reason_none) return 0;
+  if (props->deposit == wind_deposit_host && p->wind_data.phase != 2) {
+    p->wind_data.recouple_pending = reason;
+    return 0;
+  }
+  wind_recouple(p, xp, props, cosmo, time, reason);
+  return 1;
+}
+
+/**
  * @brief Accumulate the displacement of a decoupled particle.
  */
 __attribute__((always_inline)) INLINE static void wind_drift_part(
@@ -450,6 +499,8 @@ INLINE static float wind_timestep(const struct wind_props *props,
   float dt = props->dt_max;
   const double f = props->overshoot_fraction;
   if (f <= 0.) return dt;
+  if (p->wind_data.phase != 2 && props->mode == wind_recouple_density)
+    return dt;
   const double v = sqrt(xp->v_full[0] * xp->v_full[0] +
                         xp->v_full[1] * xp->v_full[1] +
                         xp->v_full[2] * xp->v_full[2]);

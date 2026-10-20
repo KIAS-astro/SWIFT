@@ -124,7 +124,18 @@ INLINE static int wind_write_particles(const struct part *parts,
       wind_data.launch_kick,
       "Speed of the kick along the launch direction at the last launch "
       "(physical; -1 if never launched)");
-  return 17;
+  list[17] = io_make_output_field(
+      "WindAmbientDensities", FLOAT, 1, UNIT_CONV_DENSITY, -3.f, parts,
+      wind_data.rho_ambient,
+      "Gas density at the particle from the non-decoupled neighbours whose "
+      "kernels contain it, at the start of the last step while decoupled "
+      "(density recoupling or host deposit; -1 if never computed)");
+  list[18] = io_make_output_field(
+      "WindRecouplingReasons", CHAR, 1, UNIT_CONV_NO_UNITS, 0.f, parts,
+      wind_data.recouple_reason,
+      "Criterion that ended the last flight: 0 none, 1 distance or height, 2 "
+      "density, 3 time, 4 apex");
+  return 19;
 }
 
 #endif /* SWIFT_WIND_TIGRESS_IO_H */

@@ -461,6 +461,14 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
     if (n_merge % 200 == 0)
       message("DEBUG merges %lld: host cell not drifted to now %lld, host active %lld",
               n_merge, n_lag, n_active);
+    message("DEBUG MERGE step %d wind %lld host %lld bin %d active %d rho %g h %g "
+            "u_w %g u_h %g m_h %g r_wh %g rho_amb %g",
+            e->step, p->id, h->id, h->time_bin, h->time_bin <= e->max_active_bin,
+            h->rho, h->h, uw, uh, mh,
+            sqrt((p->x[0] - h->x[0]) * (p->x[0] - h->x[0]) +
+                 (p->x[1] - h->x[1]) * (p->x[1] - h->x[1]) +
+                 (p->x[2] - h->x[2]) * (p->x[2] - h->x[2])),
+            p->wind_data.rho_ambient);
     if (!(uw > 0. && uh > 0.) || wind_debug_bad(uw) || wind_debug_bad(uh) ||
         h->h <= 0.f)
       message("DEBUG bad merge: wind %lld u %g host %lld u %g h %g bin %d", p->id,

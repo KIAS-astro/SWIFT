@@ -190,11 +190,18 @@ void wind_props_init(struct wind_props *props,
           speed_pdf);
   props->warm_pdf_v0 =
       parser_get_opt_param_double(params, "Wind:warm_pdf_v0_kms", 60.) * kms;
+  props->warm_pdf_slope =
+      parser_get_opt_param_double(params, "Wind:warm_pdf_slope", 0.23);
+  props->warm_pdf_floor =
+      parser_get_opt_param_double(params, "Wind:warm_pdf_floor_kms", 3.) * kms;
   props->warm_climb_v =
       parser_get_opt_param_double(params, "Wind:warm_climb_speed_kms", 0.) *
       kms;
-  if (props->warm_pdf_v0 <= 0. || props->warm_climb_v < 0.)
-    error("Wind:warm_pdf_v0_kms must be positive, warm_climb_speed_kms >= 0");
+  if (props->warm_pdf_v0 <= 0. || props->warm_pdf_floor < 0. ||
+      props->warm_climb_v < 0.)
+    error(
+        "Wind:warm_pdf_v0_kms must be positive, warm_pdf_floor_kms and "
+        "warm_climb_speed_kms >= 0");
 
   /* CR energy carried by the wind particles */
   props->cr_eta_E = parser_get_opt_param_double(
@@ -260,10 +267,10 @@ void wind_props_print(const struct wind_props *props) {
     if (props->warm_speed_pdf)
       message(
           "Wind: warm kick drawn from the K20a PDF, v_L^2 = v_ref^2 + "
-          "v_climb^2, v_ref ~ Gamma(2, v0 = %.4g), v_climb = %.4g; mean "
-          "v_L^2/2 = %.4g (internal units; replaces the fixed warm kick)",
-          props->warm_pdf_v0, props->warm_climb_v,
-          wind_warm_pdf_mean_kinetic(props->warm_pdf_v0, props->warm_climb_v));
+          "v_climb^2, v_ref ~ Gamma(2, v0), v0 = %.4g Sigma_SFR^%.3g + %.4g, "
+          "v_climb = %.4g (internal units; replaces the fixed warm kick)",
+          props->warm_pdf_v0, props->warm_pdf_slope, props->warm_pdf_floor,
+          props->warm_climb_v);
   }
   if (props->cr_eta_E > 0.)
     message("Wind: CR energy loading %.4g carried by %s, deposit %s",

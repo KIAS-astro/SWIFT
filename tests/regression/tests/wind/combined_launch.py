@@ -3,15 +3,16 @@ the K20a cool-phase outflow PDF (wind-design.md Sec. 11).
 
 The star-forming layer of wind/launch_rate (prfm_slab, Sigma_g = 200 Msun/pc^2,
 t_dep = 264 Myr). Warm speeds: v_ref ~ Gamma(2, v0), the K20a mass-flux PDF at the
-reference height, and v_L^2 = v_ref^2 + v_climb^2. Two runs:
+reference height with v0 = 60 Sigma_SFR^0.23 + 3 km/s (K20a Eq. 24 at 1 kpc), and
+v_L^2 = v_ref^2 + v_climb^2. Two runs:
 
   launch     zero field; hot TIGRESS K20b loadings at Sigma_SFR, warm eta_M = 1.5
-             (constant), v0 = 60 km/s, v_climb = 60.5 km/s; recoupling pushed
+             (constant), v_climb = 60.5 km/s; recoupling pushed
              beyond the run (d_rec = 1e3 kpc, t_rec = 1e4 Myr, no apex without
              gravity), 2 per cent of t_dep. Regression of the realised loadings
              per phase against the expected ones.
   ballistic  constant field g = 1e-7 cm s^-2 along -z; warm only (eta_M = 1.5,
-             v0 = 60 km/s, v_climb = 0), recoupling at the apex or at a height of
+             v_climb = 0), recoupling at the apex or at a height of
              0.6 kpc along the launch direction, decoupled time-step cap 0.01
              Myr, 8 Myr, snapshots every 0.5 Myr. Validation of the warm-particle
              trajectories against the analytic parabola.
@@ -20,14 +21,15 @@ Checks, launch:
   1. sum m / eta per phase (log) against M_* within 3 sigma (each launch stands
      for m / eta of stars; sigma^2 = (1 + 1/eta) N_* m_g^2): realised mass
      loadings = input;
-  2. warm kicks (snapshot WindLaunchKicks) against the target CDF: one-sample
-     Kolmogorov-Smirnov, D sqrt(N) < 1.949 (p = 1e-3 for draws from the target),
-     and every kick >= v_climb;
-  3. warm launched energy per mass (log, m (v_L^2/2 + gamma u)) against
-     3 v0^2 + v_climb^2/2 + gamma u within 3 standard errors, sd(v_L^2/2) =
-     21^1/2 v0^2;
-  4. warm launched momentum per mass against E[v_L] (quadrature) within 3
-     standard errors, sd(v_L) from the PDF;
+  2. warm kicks (snapshot WindLaunchKicks) against the target distribution: the
+     probability integral transform u = F(kick; v0(Sigma_SFR), v_climb) at each
+     launch's recorded Sigma_SFR is U(0, 1) for draws from the target; one-sample
+     Kolmogorov-Smirnov, D sqrt(N) < 1.949 (p = 1e-3); every kick >= v_climb;
+  3. warm launched energy per mass (log, m (v_L^2/2 + gamma u)) against the mean
+     of 3 v0^2 + v_climb^2/2 + gamma u over the launches within 3 standard
+     errors, sd(v_L^2/2) = 21^1/2 v0^2;
+  4. warm launched momentum per mass against the mean of E[v_L] (quadrature)
+     within 3 standard errors, sd(v_L) from the PDF;
   5. warm energy loading E_warm / (u_* M_*) against eta_M,warm e_warm / u_*
      within 3 sigma (count noise (1 + eta)/(eta N_*) plus speed noise);
   6. hot launched energy (log) against sum over hot launches of m eta_E u_* /
@@ -76,6 +78,7 @@ U_WARM = units.u_from_T(1e4, 0.6)
 GAMMA = 5.0 / 3.0
 ETA_W = 1.5
 V0, V_CLIMB = 60.0, 60.5  # km/s
+PDF_SLOPE, PDF_FLOOR = 0.23, 3.0  # K20a Eq. 24 (Wind defaults)
 G_CGS = 1e-7
 D_REC_WARM = 0.6  # kpc
 DT_CAP_MYR = 0.01
@@ -94,10 +97,26 @@ RUNS = {
 }
 
 
+def scale(sigma_sfr, a=V0, b=PDF_SLOPE, c=PDF_FLOOR):
+    """K20a Eq. 24 scale speed [km/s] at Sigma_SFR [Msun/kpc^2/yr], clipped as in
+    src/wind_physics.h."""
+    return a * np.clip(sigma_sfr, 1e-4, 1.0) ** b + c
+
+
 def cdf(v, v0, vc):
     """Target CDF of the launch speed (src/wind_physics.h)."""
     x = np.sqrt(np.maximum(v * v - vc * vc, 0.0)) / v0
     return np.where(v > vc, 1.0 - (1.0 + x) * np.exp(-x), 0.0)
+
+
+def ks_uniform(u):
+    """One-sample Kolmogorov-Smirnov distance of u against U(0, 1)."""
+    u = np.sort(u)
+    n = u.size
+    if n == 0:
+        return 0.0
+    i = np.arange(n)
+    return float(max(np.max((i + 1) / n - u), np.max(u - i / n)))
 
 
 def speed_moments(v0, vc):
@@ -171,33 +190,38 @@ def analyze_launch(ctx, checks):
                             sigma=np.sqrt((1 + 1 / e_med) * max(n_star, 1)) * m_g / m_star,
                             source=f"{int(sel.sum())} launches, N_* = {n_star}"))
 
-    kw = np.sort(kick[warm])
-    n = kw.size
-    F = cdf(kw, V0, V_CLIMB)
-    i = np.arange(n)
-    D = max(np.max((i + 1) / n - F), np.max(F - i / n))
+    k = kick[warm]
+    n = k.size
+    v0 = scale(sig[warm])
+    D = ks_uniform(cdf(k, v0, V_CLIMB))
     checks.append(Check(f"{name}: warm kicks KS D sqrt(N)", D * np.sqrt(n), 1.949,
-                        kind="max", source=f"K20a Gamma(2, {V0}) with climb {V_CLIMB}; "
-                                           f"N = {n}; p = 1e-3 critical value"))
-    checks.append(Check(f"{name}: min warm kick [km/s]", kw.min(), V_CLIMB * (1 - 1e-6),
+                        kind="max", source=f"PIT u = F(kick; v0(Sigma_SFR), {V_CLIMB}) "
+                                           f"against U(0,1); N = {n}; p = 1e-3"))
+    checks.append(Check(f"{name}: min warm kick [km/s]", k.min(), V_CLIMB * (1 - 1e-6),
                         kind="min", source="v_L >= v_climb"))
 
-    e_mean = (3 * V0 ** 2 + 0.5 * V_CLIMB ** 2) * 1e10 + GAMMA * U_WARM  # erg/g
+    mw = m[warm]
+    e_i = (3 * v0 ** 2 + 0.5 * V_CLIMB ** 2) * 1e10 + GAMMA * U_WARM  # erg/g
     E_w = tail["E_launch_warm"] * to_erg
     M_w = tail["m_warm"] * to_g
-    se = np.sqrt(21.0) * (V0 * 1e5) ** 2 / np.sqrt(n)
+    se = np.sqrt(np.sum(mw ** 2 * 21.0 * (v0 * 1e5) ** 4)) / M_w
+    e_mean = np.sum(mw * e_i) / M_w
     checks.append(Check(f"{name}: warm launched energy per mass [(km/s)^2]",
                         E_w / M_w / 1e10, e_mean / 1e10, kind="sigma", tol=3.0,
-                        sigma=se / 1e10, source="3 v0^2 + v_c^2/2 + gamma u(1e4 K)"))
-    v1, sd1 = speed_moments(V0, V_CLIMB)
+                        sigma=se / 1e10, source="3 v0^2 + v_c^2/2 + gamma u(1e4 K) at "
+                                                "each launch's Sigma_SFR"))
+    mom = np.array([speed_moments(x, V_CLIMB) for x in v0])
     checks.append(Check(f"{name}: warm launched momentum per mass [km/s]",
-                        tail["p_launch_warm"] * to_p / M_w / 1e5, v1, kind="sigma",
-                        tol=3.0, sigma=sd1 / np.sqrt(n), source="E[v_L] by quadrature"))
+                        tail["p_launch_warm"] * to_p / M_w / 1e5,
+                        np.sum(mw * mom[:, 0]) / M_w, kind="sigma", tol=3.0,
+                        sigma=np.sqrt(np.sum(mw ** 2 * mom[:, 1] ** 2)) / M_w,
+                        source="E[v_L] by quadrature at each launch's v0"))
     eta_E_w = ETA_W * e_mean / U_STAR
-    rel_var = (1 + ETA_W) / (ETA_W * n_star) + 21.0 * (V0 * 1e5) ** 4 / (n * e_mean ** 2)
+    rel_var = (1 + ETA_W) / (ETA_W * n_star) + (se / e_mean) ** 2
     checks.append(Check(f"{name}: warm eta_E realised", E_w / (U_STAR * m_star), eta_E_w,
                         kind="sigma", tol=3.0, sigma=eta_E_w * np.sqrt(rel_var),
-                        source=f"eta_M,warm e / u_* = {eta_E_w:.4g}"))
+                        source=f"eta_M,warm <e> / u_* = {eta_E_w:.4g}"))
+    kw = np.sort(k)
 
     eta_E_hot = np.array([tp.powerlaw(tp.HOT_E_NORM["K20"], tp.HOT_E_SLOPE, x)
                           for x in sig[hot]])

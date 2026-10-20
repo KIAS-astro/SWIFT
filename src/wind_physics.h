@@ -271,10 +271,23 @@ static inline double wind_cr_specific_energy(const double u_star,
  * Warm launch speeds drawn from the K20a cool-phase outflow velocity PDF
  * (wind-design.md Sec. 11). K20a fit the mass-flux PDF per dex of v_out as
  * (v/v0)^2 exp(-v/v0); per unit v this is the Gamma distribution of shape 2,
- * p(v) = v / v0^2 exp(-v/v0), mean 2 v0. The speed at the reference height
- * v_ref is drawn from it; the launch speed adds the potential climb from the
- * midplane to that height, v_L^2 = v_ref^2 + v_climb^2.
+ * p(v) = v / v0^2 exp(-v/v0), mean 2 v0. The scale is v0 = a Sigma_SFR^b + c
+ * (K20a Eq. 24; a = 60 km/s at |z| = 1 kpc, b = 0.23, c = 3 km/s). The speed at
+ * the reference height v_ref is drawn from it; the launch speed adds the
+ * potential climb from the midplane to that height, v_L^2 = v_ref^2 +
+ * v_climb^2.
  */
+
+/**
+ * @brief Scale speed of the K20a PDF, a Sigma_SFR^b + c, with Sigma_SFR in
+ * Msun kpc^-2 yr^-1 clipped to [1e-4, 1] as for the loadings.
+ */
+static inline double wind_warm_pdf_scale(const double a, const double b,
+                                         const double c,
+                                         const double sigma_sfr) {
+  const double s = fmin(fmax(sigma_sfr, 1e-4), 1.);
+  return a * pow(s, b) + c;
+}
 
 /**
  * @brief Launch speed from two uniform numbers.

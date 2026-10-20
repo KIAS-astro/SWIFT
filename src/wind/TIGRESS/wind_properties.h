@@ -90,10 +90,11 @@ struct wind_props {
   double warm_v, warm_u, warm_d_rec;
 
   /*! Warm launch speed drawn from the K20a cool-phase PDF instead of the
-   * fixed warm_v: on/off, scale speed v0 of the PDF at the reference height
-   * and the speed lost climbing to it (wind-design.md Sec. 11) */
+   * fixed warm_v: on/off; scale speed of the PDF at the reference height,
+   * v0 = warm_pdf_v0 Sigma_SFR^warm_pdf_slope + warm_pdf_floor; the speed
+   * lost climbing to that height (wind-design.md Sec. 11) */
   int warm_speed_pdf;
-  double warm_pdf_v0, warm_climb_v;
+  double warm_pdf_v0, warm_pdf_slope, warm_pdf_floor, warm_climb_v;
 
   /*! CR energy loading, whether the warm phase carries CR energy too, and
    * whether the CR energy is deposited as heat at recoupling */

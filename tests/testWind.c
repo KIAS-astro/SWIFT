@@ -404,6 +404,17 @@ int main(int argc, char *argv[]) {
     check("K20a PDF: survival(0) = 1", wind_warm_pdf_survival(0., v0), 1., 0.);
     check("K20a PDF: u1 = u2 = 0 launches at v_climb",
           wind_warm_pdf_speed(0., 0., v0, 60.5), 60.5, 1e-15);
+    /* K20a Eq. 24 at 1 kpc: v_out,0 = 60 Sigma_SFR^0.23 + 3 km/s */
+    check("K20a scale at Sigma_SFR = 1e-2 [km/s]",
+          wind_warm_pdf_scale(60., 0.23, 3., 1e-2), 60. * pow(1e-2, 0.23) + 3.,
+          1e-15);
+    check("K20a scale at Sigma_SFR = 1e-2 = 23.80 km/s",
+          wind_warm_pdf_scale(60., 0.23, 3., 1e-2), 23.80, 1e-3);
+    check("K20a scale clipped below at Sigma_SFR = 1e-4",
+          wind_warm_pdf_scale(60., 0.23, 3., 1e-7),
+          wind_warm_pdf_scale(60., 0.23, 3., 1e-4), 1e-15);
+    check("K20a scale clipped above at Sigma_SFR = 1 (63 km/s)",
+          wind_warm_pdf_scale(60., 0.23, 3., 30.), 63., 1e-15);
 
     /* Expected warm energy per launched mass at the Arkenstone set-up (v0 =
      * 60, v_climb = 60.5 km/s, 1e4 K): 3 v0^2 + v_c^2/2 + gamma u = 10800 +

@@ -10,9 +10,12 @@ internal convention), lowspec (S24a LowSpec: 6.41, 0.966, Mach 4) and tig (K20b 
 fits at Sigma_SFR, enthalpy convention):
   L_hot10   hot only;
   L_w100    plus the warm channel at a fixed 100 km/s (Experiment B);
-  L_wpdf    plus the warm channel with speeds from the K20a PDF: v_ref ~ Gamma(2,
-            60 km/s) at 1 kpc, v_L^2 = v_ref^2 + (60.5 km/s)^2, the potential climb
-            to 1 kpc at R = 2.5 kpc (wind-design.md Sec. 10.3);
+  L_wk20a   plus the warm channel with speeds from the K20a PDF: v_ref ~ Gamma(2,
+            v0) at 1 kpc, v0 = 60 Sigma_SFR^0.23 + 3 km/s (K20a Eq. 24), v_L^2 =
+            v_ref^2 + (60.5 km/s)^2, the potential climb to 1 kpc at R = 2.5 kpc
+            (wind-design.md Sec. 10.3);
+  L_wv60    the same with v0 = 60 km/s at every Sigma_SFR (2-3 times the K20a
+            scale; a fast-tail sensitivity run);
 and nowind. Warm loading: the K20 set, 10^-0.961 Sigma_SFR^-0.44 (K26 mhd at 2 kpc);
 1e4 K. Recoupling: hot at max(10 kpc, 2 kernel supports) or 50 Myr; warm at a
 height of max(1.5 kpc, 2 kernel supports) along the launch direction, 50 Myr or the
@@ -30,9 +33,11 @@ Checks (each run):
      stellar mass formed within 3 sigma (arkenstone_twophase.wind_checks);
   3. hot particles recoupled by the last snapshot: distance >= the recoupling
      threshold (1 - 1e-6) or flight time >= 50 Myr (minus one 1 Myr step);
-  4. L_wpdf: warm launched energy per mass (log) against 3 v0^2 + v_c^2/2 +
-     gamma u within 3 standard errors (sd 21^1/2 v0^2), and the kicks of the
-     warm particles' last launches against the target CDF (KS, D sqrt(N) < 1.949).
+  4. K20a PDF runs, over the warm particles' last launches: mean launch energy per
+     mass against the mean of 3 v0^2 + v_c^2/2 + gamma u at the recorded
+     Sigma_SFR within 3 standard errors (sd 21^1/2 v0^2), and the kicks against
+     the target distribution (KS of the probability integral transform,
+     D sqrt(N) < 1.949).
 """
 
 import os
@@ -46,8 +51,7 @@ from swiftreg.snapshot import snapshots
 
 from . import arkenstone_va as va
 from . import arkenstone_twophase as ark2
-from ..wind import _twophase as tp
-from ..wind.combined_launch import cdf as pdf_cdf
+from ..wind import combined_launch as cl
 
 DESCRIPTION = "Arkenstone I galaxy with the combined wind: hot at 10 kpc plus warm (fixed or K20a PDF)"
 TIER = "long"
@@ -68,7 +72,10 @@ HOT = {
 WARM = {
     "hot10": {},
     "w100": {"warm_phase": 1},
-    "wpdf": {"warm_phase": 1, "warm_launch_speed_pdf": "K20a", "warm_pdf_v0_kms": V0,
+    "wk20a": {"warm_phase": 1, "warm_launch_speed_pdf": "K20a", "warm_pdf_v0_kms": V0,
+              "warm_climb_speed_kms": V_CLIMB},
+    "wv60": {"warm_phase": 1, "warm_launch_speed_pdf": "K20a", "warm_pdf_v0_kms": V0,
+             "warm_pdf_slope": 0.0, "warm_pdf_floor_kms": 0.0,
              "warm_climb_speed_kms": V_CLIMB},
 }
 WINDS = {"nowind": {"loading_model": "none"}}
@@ -118,22 +125,22 @@ def combined_checks(ctx, name, w, last, checks, v_climb):
                             source=f"{int(hot.sum())} recoupled; {int(by_d.sum())} by "
                                    f"distance, median {np.median(d[hot]):.3g} kpc"))
     if w.get("warm_launch_speed_pdf") == "K20a":
-        tail = tp.phases_tail(ctx.path(name, f"{name}.log"))
         warm = (ph == 2) & (last.read(0, "WindLaunchCounts", cgs=False) > 0)
-        n = int(tail["n_warm"])
-        e = tail["E_launch_warm"] / tail["m_warm"] * units.UNIT_VELOCITY ** 2
-        e_mean = (3 * V0 ** 2 + 0.5 * v_climb ** 2) * 1e10 + GAMMA * U_WARM
-        checks.append(Check(f"{name}: warm launched energy per mass [(km/s)^2]",
+        v0 = cl.scale(last.read(0, "WindLaunchSigmaSFR", cgs=False)[warm],
+                      w["warm_pdf_v0_kms"], w.get("warm_pdf_slope", cl.PDF_SLOPE),
+                      w.get("warm_pdf_floor_kms", cl.PDF_FLOOR))
+        k = last.read(0, "WindLaunchKicks")[warm] / 1e5
+        n = k.size
+        e = np.mean(0.5 * k ** 2) * 1e10 + GAMMA * U_WARM
+        e_mean = np.mean(3 * v0 ** 2 + 0.5 * v_climb ** 2) * 1e10 + GAMMA * U_WARM
+        checks.append(Check(f"{name}: warm launch energy per mass [(km/s)^2]",
                             e / 1e10, e_mean / 1e10, kind="sigma", tol=3.0,
-                            sigma=np.sqrt(21.0) * V0 ** 2 / np.sqrt(max(n, 1)),
-                            source=f"K20a PDF, {n} warm launches"))
-        k = np.sort(last.read(0, "WindLaunchKicks")[warm] / 1e5)
-        m = k.size
-        F = pdf_cdf(k, V0, v_climb)
-        i = np.arange(m)
-        D = max(np.max((i + 1) / m - F), np.max(F - i / m)) if m else 0.0
-        checks.append(Check(f"{name}: warm kicks KS D sqrt(N)", D * np.sqrt(m), 1.949,
-                            kind="max", source=f"last launch of {m} warm particles"))
+                            sigma=np.sqrt(np.sum(21.0 * v0 ** 4)) / max(n, 1),
+                            source=f"K20a PDF at the launch Sigma_SFR, last launch of "
+                                   f"{n} warm particles"))
+        D = cl.ks_uniform(cl.cdf(k, v0, v_climb))
+        checks.append(Check(f"{name}: warm kicks KS D sqrt(N)", D * np.sqrt(n), 1.949,
+                            kind="max", source="PIT at the launch Sigma_SFR against U(0,1)"))
 
 
 def analyze(ctx):

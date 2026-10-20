@@ -247,7 +247,10 @@ INLINE static void wind_launch(struct part *p, struct xpart *xp,
                                              random_number_wind_warm_speed_1);
       const double u2 = random_unit_interval(p->id, ti_current,
                                              random_number_wind_warm_speed_2);
-      dv = wind_warm_pdf_speed(u1, u2, props->warm_pdf_v0, props->warm_climb_v);
+      const double v0 =
+          wind_warm_pdf_scale(props->warm_pdf_v0, props->warm_pdf_slope,
+                              props->warm_pdf_floor, xp->sf_data.Sigma_SFR);
+      dv = wind_warm_pdf_speed(u1, u2, v0, props->warm_climb_v);
     } else {
       dv = props->warm_v;
     }

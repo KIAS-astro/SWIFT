@@ -6,10 +6,11 @@ The set-up of isolated_galaxy/two_phase_cgm (H12 disc in a hot CGM,
 150 kpc, 8 top-level cells) with the recoupling of isolated_galaxy/arkenstone_combined
 (hot at max(10 kpc, 2 kernel supports) or 50 Myr; warm at a height of max(1.5 kpc, 2
 kernel supports), 50 Myr or the apex). Runs (SWIFT_REG_CGMC_RUNS, default all):
-  nowind, tig_hot10, tig_w100, tig_wpdf
-with TIGRESS K20b hot loadings and the K20 warm set; tig_wpdf draws warm speeds from
-the K20a PDF with v_climb = 62 km/s, the climb to 1 kpc at R = 6 kpc (the median
-radius of the IC gas within 0.5 kpc of the midplane; direct summation over the IC
+  nowind, tig_hot10, tig_w100, tig_wk20a, tig_wv60
+with TIGRESS K20b hot loadings and the K20 warm set; tig_wk20a and tig_wv60 draw warm
+speeds from the K20a PDF as in arkenstone_combined, with v_climb = 62 km/s, the climb
+to 1 kpc at R = 6 kpc (the median radius of the IC gas within 0.5 kpc of the
+midplane; direct summation over the IC
 particles plus the Hernquist halo gives Phi(1 kpc) - Phi(0) = 1950 (km/s)^2 there,
 3030 at R = 4 kpc and 1225 at 8 kpc). Length SWIFT_REG_CGMC_TEND_MYR (default 1000),
 snapshots every 10 Myr. SWIFT_REG_SEED as in arkenstone_combined.
@@ -40,7 +41,8 @@ WINDS = {
     "nowind": {"loading_model": "none"},
     "tig_hot10": arkc.WINDS["tig_hot10"],
     "tig_w100": arkc.WINDS["tig_w100"],
-    "tig_wpdf": dict(arkc.WINDS["tig_wpdf"], warm_climb_speed_kms=V_CLIMB),
+    "tig_wk20a": dict(arkc.WINDS["tig_wk20a"], warm_climb_speed_kms=V_CLIMB),
+    "tig_wv60": dict(arkc.WINDS["tig_wv60"], warm_climb_speed_kms=V_CLIMB),
 }
 _only = os.environ.get("SWIFT_REG_CGMC_RUNS")
 RUNS = [k for k in WINDS if not _only or k in _only.split(",")]

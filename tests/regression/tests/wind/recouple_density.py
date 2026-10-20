@@ -9,8 +9,14 @@ Wind:recoupling_mode density and a threshold n_H = 0.024 cm^-3 (0.3 of the slab)
 The ambient density is the scatter estimate sum_j m_j W(|x - x_j|, h_j) over the
 non-decoupled gas, computed at the start of every step (src/wind.c).
 
-Two runs from the same ICs: deposit 'self' (the particle rejoins the hydro) and
-deposit 'host' (merged into its nearest gas neighbour and removed).
+Three runs from the same ICs: deposit 'self' (the particle rejoins the hydro),
+deposit 'host' (merged into its nearest gas neighbour and removed), and 'host' with
+--drift-all ('host_drift_all'). With --drift-all every active particle is drifted and
+its density sums zeroed (hydro_init_part) before the wind pass, so the merge meets an
+active host with rho = 0. In the isolated-galaxy runs the same happens at every
+tree-rebuild step (engine_prepare drifts all with init); the merge then wrote the SPHENIX pressure and sound speed, which share a union
+with the density sums, as NaN, and the NaN spread through the forces to every
+particle until the tree build aborted ("too many particles at the same position").
 
 Checks, run 'self':
   1. every wind particle recoupled, all by density (WindRecouplingReasons = 2);
@@ -33,6 +39,9 @@ Checks, run 'host':
      the slab interface, not in exact equilibrium, has accelerations larger than the
      uniform gas of wind/recouple, where the same offset stays below 1e-5. The
      merges change the 'host' run's energy history by under 1e-5 from 'self'.
+Checks, run 'host_drift_all':
+  9. eight particles removed, no non-finite velocity or energy in any snapshot, mass
+     to 1e-6 and energy to 5e-5 as in 'host'.
 """
 
 import os
@@ -105,14 +114,16 @@ def run(ctx):
     ctx.table(params.PRFM_COOLING_TABLE)
     ctx.table("photometry")
     myr = _common.MYR
-    for deposit in ("self", "host"):
-        os.makedirs(ctx.path(deposit))
-        write_ics(ctx.path(deposit, "ics.hdf5"))
+    for name in ("self", "host", "host_drift_all"):
+        deposit = "self" if name == "self" else "host"
+        os.makedirs(ctx.path(name))
+        write_ics(ctx.path(name, "ics.hdf5"))
         p = _common.base_params(ctx, "ics.hdf5", T_END * myr, 0.5 * myr, DT_MAX * myr)
         p["Wind"] = {"loading_model": "none", "recoupling_mode": "density",
                      "recoupling_density_H_p_cm3": NH_REC,
                      "recoupling_deposit": deposit, "recoupling_time_Myr": 100.0}
-        ctx.swift(p, FLAGS, subdir=deposit, name=deposit, timeout=1800)
+        flags = FLAGS + (["--drift-all"] if name == "host_drift_all" else [])
+        ctx.swift(p, flags, subdir=name, name=name, timeout=1800)
 
 
 def totals(snap):
@@ -181,6 +192,28 @@ def analyze(ctx):
     rel_Es = [abs(totals(s)[2] / E0s - 1) for s in s_snaps]
     checks.append(Check("self: max |E / E0 - 1|", max(rel_Es), 5e-5, kind="max",
                         source="as above, no merge"))
+    snaps_d = snapshots(ctx.path("host_drift_all"))
+    nonfinite = 0
+    rel_Ed = []
+    M0d, _, E0d = totals(snaps_d[0])
+    for s in snaps_d:
+        v = s.read(0, "Velocities", cgs=False)
+        u = s.read(0, "InternalEnergies", cgs=False)
+        nonfinite += int((~np.isfinite(v).all(axis=1) | ~np.isfinite(u)).sum())
+        rel_Ed.append(abs(totals(s)[2] / E0d - 1))
+    nd = len(snaps_d[0].read(0, "Masses", cgs=False)) - len(
+        snaps_d[-1].read(0, "Masses", cgs=False))
+    checks.append(Check("host, drift-all: gas particles removed", nd, N_WIND,
+                        kind="equal", source="merges into active hosts"))
+    checks.append(Check("host, drift-all: non-finite v or u in any snapshot", nonfinite, 0,
+                        kind="equal", source="active-host merge must not write the "
+                        "SPHENIX force fields that share a union with the density sums"))
+    checks.append(Check("host, drift-all: total mass end / start",
+                        totals(snaps_d[-1])[0] / M0d, 1.0, kind="rel", tol=1e-6,
+                        source="merge moves mass"))
+    checks.append(Check("host, drift-all: max |E / E0 - 1|", max(rel_Ed), 5e-5, kind="max",
+                        source="as the host run"))
     ctx.info.update({"self_recouple_distance_kpc": d.tolist(),
-                     "host_rel_E": rel_E, "host_rel_P": rel_P, "log_tail": tail})
+                     "host_rel_E": rel_E, "host_rel_P": rel_P, "log_tail": tail,
+                     "host_drift_all_rel_E": rel_Ed})
     return checks

@@ -47,17 +47,22 @@ BUILDS = {k: mx.build(s) for k, s in mx.SCHEMES.items()}
 N = 16
 T_CROSS = 1.0 / np.sqrt(mx.GAMMA)
 T_END = T_CROSS
+JITTER = 0.3  # of the lattice spacing, uniform in each coordinate
+T_JIT = 3.0 * T_CROSS
 
 # Measured 2026-10-20 (SPHENIX): R -> (rms P error at t = 0, peak rms
 # speed / c_g in the first crossing)
 SPH_REFERENCE = {3: (0.599, 0.164), 10: (2.56, 0.353), 30: (8.22, 0.419)}
 
 
-def _ics(path, R):
+def _ics(path, R, jitter=0.0):
     x = (np.arange(N) + 0.5) / N
     xx, yy, zz = np.meshgrid(x, x, x, indexing="ij")
     pos = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
     n = N ** 3
+    if jitter > 0.0:
+        pos = np.mod(pos + np.random.default_rng(5).uniform(-jitter, jitter, pos.shape) / N,
+                     1.0)
     rng = np.random.default_rng(11)
     light = np.zeros(n, bool)
     light[rng.permutation(n)[: n // 2]] = True
@@ -82,6 +87,21 @@ def run(ctx):
             p["SPH"]["h_max"] = 2 * 1.2348 / N
             ctx.swift(p, mx.flags(scheme), binary=b, subdir=sub, name="run",
                       timeout=1800)
+            # Jittered lattice: volumes differ between neighbours, so MFM's
+            # pressures are no longer exact by construction
+            sub = f"{b}_jit_R{R}"
+            os.makedirs(ctx.path(sub), exist_ok=True)
+            _ics(ctx.path(sub, "ics.hdf5"), R, jitter=JITTER)
+            p = mx.params(T_JIT, n_snap=6, top_cells=3)
+            p["SPH"]["h_max"] = 2 * 1.2348 / N
+            ctx.swift(p, mx.flags(scheme), binary=b, subdir=sub, name="run",
+                      timeout=3600)
+
+
+def measure_jit(ctx, b, R):
+    """rms speed / c_g at the end of the jittered run."""
+    v = snapshots(ctx.path(f"{b}_jit_R{R}"))[-1].read(0, "Velocities", cgs=False)
+    return float(np.sqrt(np.mean((v ** 2).sum(axis=1))) / np.sqrt(mx.GAMMA))
 
 
 def measure(ctx, b, R):
@@ -100,7 +120,16 @@ def analyze(ctx):
     checks = []
     for b in mx.SCHEMES:
         res = {R: measure(ctx, b, R) for R in mx.RATIOS}
+        jit = {R: measure_jit(ctx, b, R) for R in mx.RATIOS}
+        for R in mx.RATIOS:
+            res[R]["v_jit_end"] = jit[R]
         ctx.info[b] = res
+        if b == "mfm":
+            for R in mx.RATIOS[1:]:
+                checks.append(Check(f"mfm jittered R={R}: rms speed / R=1 run", jit[R] / jit[1],
+                                    3.0, kind="max",
+                                    source="the jittered lattice relaxes at any R; a "
+                                           "mass-ratio error shows as extra motion"))
         checks.append(Check(f"{b} R=1: peak rms speed / c_g", res[1]["v_peak"], 1e-3,
                             kind="max", source="equal masses on a lattice: equilibrium"))
         for R in mx.RATIOS[1:]:

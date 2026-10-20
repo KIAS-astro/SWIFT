@@ -379,26 +379,37 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
   wind_global_stats.E_th_recouple += mw * uw;
   wind_global_stats.n_merged += 1.;
 
-  /* Metal mass fractions: mass-weighted mean */
+  /* An active host may be between hydro_init_part and its density loop (at a
+   * rebuild or with --drift-all, everything is drifted before this pass): its
+   * density sums, and in SPHENIX the force fields sharing a union with them,
+   * are then accumulators for this step and must not be written. */
+  const int host_active = h->time_bin <= e->max_active_bin;
+
+  /* Metal mass fractions: mass-weighted mean. The smoothed fractions of an
+   * active host are density-loop sums (chemistry_init_part zeroes them), so
+   * they are left to the loop; writing a mean into the sum multiplied the
+   * hydrogen fraction seen by the cooling by about 1e4. */
 #if defined(CHEMISTRY_EAGLE)
   for (int k = 0; k < chemistry_element_count; k++) {
     h->chemistry_data.metal_mass_fraction[k] =
         (mw * p->chemistry_data.metal_mass_fraction[k] +
          mh * h->chemistry_data.metal_mass_fraction[k]) /
         m;
-    h->chemistry_data.smoothed_metal_mass_fraction[k] =
-        (mw * p->chemistry_data.smoothed_metal_mass_fraction[k] +
-         mh * h->chemistry_data.smoothed_metal_mass_fraction[k]) /
-        m;
+    if (!host_active)
+      h->chemistry_data.smoothed_metal_mass_fraction[k] =
+          (mw * p->chemistry_data.smoothed_metal_mass_fraction[k] +
+           mh * h->chemistry_data.smoothed_metal_mass_fraction[k]) /
+          m;
   }
   h->chemistry_data.metal_mass_fraction_total =
       (mw * p->chemistry_data.metal_mass_fraction_total +
        mh * h->chemistry_data.metal_mass_fraction_total) /
       m;
-  h->chemistry_data.smoothed_metal_mass_fraction_total =
-      (mw * p->chemistry_data.smoothed_metal_mass_fraction_total +
-       mh * h->chemistry_data.smoothed_metal_mass_fraction_total) /
-      m;
+  if (!host_active)
+    h->chemistry_data.smoothed_metal_mass_fraction_total =
+        (mw * p->chemistry_data.smoothed_metal_mass_fraction_total +
+         mh * h->chemistry_data.smoothed_metal_mass_fraction_total) /
+        m;
 #endif
 
   hydro_set_mass(h, m);
@@ -410,14 +421,11 @@ static void wind_merge_into_host(struct engine *e, struct part *p,
   }
   hydro_set_physical_internal_energy(h, hx, cosmo, u);
 
-  if (h->time_bin <= e->max_active_bin) {
-    /* An active host may be between hydro_init_part (at a rebuild or with
-     * --drift-all, everything is drifted before this pass) and its density
-     * loop: in
-     * SPHENIX the force fields (pressure, sound speed) share a union with the
-     * density sums, so the feedback setters below would write into those sums
-     * (with rho = 0 they write NaN). Set only the drifted energy; the ghost
-     * recomputes pressure, sound speed and v_sig this step. */
+  if (host_active) {
+    /* In SPHENIX the force fields (pressure, sound speed) share a union with
+     * the density sums, so the feedback setters below would write into those
+     * sums (with rho = 0 they write NaN). Set only the drifted energy; the
+     * ghost recomputes pressure, sound speed and v_sig this step. */
 #if defined(SPHENIX_SPH)
     hydro_set_init_internal_energy(h, u / cosmo->a_factor_internal_energy);
 #else

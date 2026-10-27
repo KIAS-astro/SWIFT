@@ -69,6 +69,11 @@ struct star_formation_xpart_data {
 
   /*! Dynamical time of the rate formulation (PRFM-int or PRFM-vol) */
   float t_dyn;
+
+  /*! Pixel of the face-on map holding this particle's mass in the last
+   * build (-1: none), and that mass; set by prfm_map_build() */
+  int map_pixel;
+  float map_mass;
 };
 
 /**

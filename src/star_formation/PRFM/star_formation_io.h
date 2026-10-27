@@ -68,7 +68,8 @@ __attribute__((always_inline)) INLINE static int star_formation_write_particles(
       "PRFMMapGasSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA,
       0.f, xparts, sf_data.Sigma_g_map,
       "PRFM gas surface density Sigma_g of the face-on map at the particle, "
-      "at its last active step, whichever estimator is used.");
+      "at its last active step, whichever estimator is used; without the "
+      "particle's own mass unless PRFMStarFormation:exclude_own_mass = 0.");
   list[2] = io_make_output_field(
       "PRFMStellarSurfaceDensities", FLOAT, 1, UNIT_CONV_MASS_PER_UNIT_AREA,
       0.f, xparts, sf_data.Sigma_s,

@@ -27,9 +27,17 @@
  * the stellar mass and the stellar sum m v_z and sum m v_z^2. It is rebuilt
  * once per step from the particles on each rank and summed over ranks. A gas
  * particle's Sigma_g, Sigma_* and sigma_*z are the averages of the map over
- * the pixels whose centres lie within R_cyl of it, weighted by the 2D cubic
- * spline W(d / R_cyl) and normalised by the sum of the weights of the pixels
- * that lie on the map. The disc normal is the z axis.
+ * the pixels whose centres lie within R_cyl of it, weighted by a top hat
+ * (the default) or by the 2D cubic spline W(d / R_cyl) (J26), and
+ * normalised by the sum of the weights of the pixels that lie on the map.
+ * The disc normal is the z axis.
+ *
+ * By default a gas particle's Sigma_g excludes its own mass: the build
+ * records the pixel and the mass each gas particle deposited, and the sample
+ * takes that mass out of that pixel before weighting, so Sigma_g is the
+ * column of all other gas particles. Included, the particle's own term is
+ * m_g w_own / (sum w A_pix), which for the spline at R_cyl = 500 pc is
+ * m_g 40 / (7 pi R_cyl^2), about the whole column at m_g = 1e7 Msun.
  *
  * Particle positions are those of the last drift, which for inactive
  * particles may lag the current time by their time-step; the resulting
@@ -62,6 +70,12 @@ struct prfm_map_params {
   /*! Radius of the averaging cylinder R_cyl */
   double R_cyl;
 
+  /*! Weight the pixels by the 2D cubic spline (else a top hat) */
+  int spline;
+
+  /*! Leave a gas particle's own mass out of its Sigma_g */
+  int exclude_own_mass;
+
   /*! Half-height of the slab mapped */
   double half_height;
 
@@ -83,7 +97,8 @@ void prfm_map_params_print(const struct prfm_map_params *mp);
 
 void prfm_map_build(struct engine *e, const struct prfm_map_params *mp);
 
-void prfm_map_sample(const double x[3], double *Sigma_g, double *Sigma_s,
+void prfm_map_sample(const double x[3], const int own_pixel,
+                     const float own_mass, double *Sigma_g, double *Sigma_s,
                      double *sigma_sz, double *rho_d);
 
 void prfm_map_clean(void);

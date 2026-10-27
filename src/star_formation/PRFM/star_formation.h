@@ -55,7 +55,8 @@
  * disc (src/prfm_map.h), rho_d from the Hernquist potential. As an option
  * Sigma_g is instead the kernel column rho_SPH / w(0; H_k) = rho_SPH H_k / 1.4
  * of the particle (cubic spline of support H_k = gamma_K h), which needs no
- * disc plane, with an optional bias correction. As another option the rate
+ * disc plane, with an optional bias correction and a rate factor that
+ * divides t_dep. As another option the rate
  * is PRFM-vol (J26 Secs. 2.4-2.5, src/prfm_physics.h prfm_vol()): P_eff of
  * the effective EoS at the measured density, the J26 eq. 26 dynamical time
  * with rho_* from the map's Sigma_* and sigma_*z, and R_f = 2; the PRFM-int
@@ -168,6 +169,9 @@ struct star_formation {
   /*! Largest number of regula falsi steps of the equilibrium correction */
   int kc_n_iter;
 
+  /*! With the kernel column, t_dep is divided by this factor */
+  double kc_rate_factor;
+
   /*! Number of stars to form per gas particle */
   int num_stars_per_gas_particle;
 };
@@ -186,6 +190,7 @@ INLINE static double star_formation_prfm_Zprime(
  * Sigma_g from the particle's kernel column.
  *
  * @param p The #part.
+ * @param own The #xpart of p, for the mass it deposited on the map.
  * @param starform The star formation properties.
  * @param cosmo The current cosmological model.
  * @param state (return) The PRFM state (cgs); unset if Sigma_g = 0.
@@ -194,12 +199,13 @@ INLINE static double star_formation_prfm_Zprime(
  * @return 0 if the particle sees no gas on the map, 1 otherwise.
  */
 INLINE static int star_formation_prfm_state(
-    const struct part *p, const struct star_formation *starform,
-    const struct cosmology *cosmo, struct prfm_state *state,
-    struct xpart *xp) {
+    const struct part *p, const struct xpart *own,
+    const struct star_formation *starform, const struct cosmology *cosmo,
+    struct prfm_state *state, struct xpart *xp) {
 
   double Sigma_g, Sigma_s, sigma_sz, rho_d;
-  prfm_map_sample(p->x, &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
+  prfm_map_sample(p->x, own->sf_data.map_pixel, own->sf_data.map_mass,
+                  &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
   const double Sigma_g_map = Sigma_g;
   const double Zprime = star_formation_prfm_Zprime(p, starform);
 
@@ -252,6 +258,9 @@ INLINE static int star_formation_prfm_state(
              sigma_sz * starform->velocity_to_cgs, starform->c_d,
              &starform->cal, Zprime, starform->n_iter, state);
 
+  if (starform->estimator == prfm_sigma_kernel_column)
+    state->t_dep /= starform->kc_rate_factor;
+
   if (xp != NULL) {
     xp->sf_data.Sigma_g = Sigma_g;
     xp->sf_data.Sigma_g_map = Sigma_g_map;
@@ -275,6 +284,7 @@ INLINE static int star_formation_prfm_state(
  * (prfm_vol()).
  *
  * @param p The #part.
+ * @param own The #xpart of p, for the mass it deposited on the map.
  * @param starform The star formation properties.
  * @param cosmo The current cosmological model.
  * @param state (return) The PRFM-vol state (cgs).
@@ -282,12 +292,13 @@ INLINE static int star_formation_prfm_state(
  * (internal units).
  */
 INLINE static void star_formation_prfm_vol_state(
-    const struct part *p, const struct star_formation *starform,
-    const struct cosmology *cosmo, struct prfm_state *state,
-    struct xpart *xp) {
+    const struct part *p, const struct xpart *own,
+    const struct star_formation *starform, const struct cosmology *cosmo,
+    struct prfm_state *state, struct xpart *xp) {
 
   double Sigma_g, Sigma_s, sigma_sz, rho_d;
-  prfm_map_sample(p->x, &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
+  prfm_map_sample(p->x, own->sf_data.map_pixel, own->sf_data.map_mass,
+                  &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
   prfm_vol(hydro_get_physical_density(p, cosmo) * starform->rho_to_cgs,
            Sigma_s * starform->Sigma_to_cgs, rho_d * starform->rho_to_cgs,
            sigma_sz * starform->velocity_to_cgs, &starform->cal,
@@ -327,7 +338,8 @@ INLINE static int star_formation_is_star_forming(
   } else {
     if (n_H < starform->n_floor_H_p_cm3) return 0;
     struct prfm_state state;
-    if (!star_formation_prfm_state(p, starform, cosmo, &state, NULL)) return 0;
+    if (!star_formation_prfm_state(p, xp, starform, cosmo, &state, NULL))
+      return 0;
     /* Sigma_g / (2 H_g) = W / sigma_eff^2 */
     const double rho_eq_cgs = state.W / (state.sigma_eff * state.sigma_eff);
     const double n_H_eq =
@@ -371,9 +383,9 @@ INLINE static void star_formation_compute_SFR(
 
   struct prfm_state state;
   const int has_column =
-      star_formation_prfm_state(p, starform, cosmo, &state, xp);
+      star_formation_prfm_state(p, xp, starform, cosmo, &state, xp);
   if (starform->formulation == prfm_formulation_vol) {
-    star_formation_prfm_vol_state(p, starform, cosmo, &state, xp);
+    star_formation_prfm_vol_state(p, xp, starform, cosmo, &state, xp);
   } else if (!has_column) {
     xp->sf_data.SFR = 0.f;
     return;
@@ -452,9 +464,9 @@ INLINE static void star_formation_update_part_not_SFR(
 
   /* The PRFM state for the snapshots, as for star-forming particles */
   struct prfm_state state;
-  star_formation_prfm_state(p, starform, e->cosmology, &state, xp);
+  star_formation_prfm_state(p, xp, starform, e->cosmology, &state, xp);
   if (starform->formulation == prfm_formulation_vol)
-    star_formation_prfm_vol_state(p, starform, e->cosmology, &state, xp);
+    star_formation_prfm_vol_state(p, xp, starform, e->cosmology, &state, xp);
 
   /* Check if it is the first time steps after star formation */
   if (xp->sf_data.SFR > 0.f) {
@@ -719,6 +731,13 @@ INLINE static void starformation_init_backend(
       parameter_file, "PRFMStarFormation:kernel_column_bias", 0.65);
   starform->kc_n_iter = parser_get_opt_param_int(
       parameter_file, "PRFMStarFormation:kernel_column_iterations", 20);
+  /* 1.16 calibrates the uncorrected kernel column against PRFM-int at the
+   * 1 kpc face-on pixel holding the particle in the H12 discs at 1.6e6 and
+   * 1.3e7 Msun (ai-notes prfm-method-spec.md Sec. 4.2) */
+  starform->kc_rate_factor = parser_get_opt_param_double(
+      parameter_file, "PRFMStarFormation:kernel_column_rate_factor", 1.);
+  if (starform->kc_rate_factor <= 0.)
+    error("PRFMStarFormation:kernel_column_rate_factor must be > 0");
 
   starform->num_stars_per_gas_particle = parser_get_opt_param_int(
       parameter_file, "PRFMStarFormation:num_of_stars_per_gas_particle", 1);
@@ -771,6 +790,7 @@ INLINE static void starformation_print_backend(
           starform->kc_n_iter);
     else
       message("Sigma_g from the kernel column rho_SPH / w(0; H_k)");
+    message("Kernel-column t_dep divided by %.4g", starform->kc_rate_factor);
   } else {
     message("Sigma_g from the face-on map");
   }
@@ -869,6 +889,8 @@ star_formation_first_init_part(const struct phys_const *phys_const,
   xp->sf_data.H_g = 0.f;
   xp->sf_data.t_dep = 0.f;
   xp->sf_data.t_dyn = 0.f;
+  xp->sf_data.map_pixel = -1;
+  xp->sf_data.map_mass = 0.f;
 }
 
 /**

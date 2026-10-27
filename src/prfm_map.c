@@ -67,6 +67,9 @@ static struct {
   /*! Pixel side, R_cyl (internal units) */
   double pixel, R_cyl;
 
+  /*! Spline (else top-hat) weights; own mass left out of Sigma_g */
+  int spline, exclude_own_mass;
+
   /*! Pixels to search on each side of a particle's pixel */
   int nk;
 
@@ -101,9 +104,26 @@ void prfm_map_params_init(struct prfm_map_params *mp,
   mp->pixel =
       parser_get_opt_param_double(params, "PRFMStarFormation:pixel_kpc", 0.1) *
       kpc;
+  char kernel[32] = "top_hat";
+  parser_get_opt_param_string(params, "PRFMStarFormation:cylinder_kernel",
+                              kernel, "top_hat");
+  if (strcmp(kernel, "top_hat") == 0)
+    mp->spline = 0;
+  else if (strcmp(kernel, "spline") == 0)
+    mp->spline = 1;
+  else
+    error(
+        "PRFMStarFormation:cylinder_kernel must be 'top_hat' or 'spline', got "
+        "'%s'",
+        kernel);
+  /* Top hat: R = 1 / sqrt(pi) kpc, an aperture of 1 kpc^2, the patch area of
+   * the TIGRESS calibrations. Spline: R = 500 pc (J26 Sec. 2.6). */
+  const double R_default = mp->spline ? 0.5 : 1. / sqrt(M_PI);
   mp->R_cyl = parser_get_opt_param_double(
-                  params, "PRFMStarFormation:cylinder_radius_kpc", 0.5) *
+                  params, "PRFMStarFormation:cylinder_radius_kpc", R_default) *
               kpc;
+  mp->exclude_own_mass = parser_get_opt_param_int(
+      params, "PRFMStarFormation:exclude_own_mass", 1);
   mp->half_height = parser_get_opt_param_double(
                         params, "PRFMStarFormation:half_height_kpc", 1.0) *
                     kpc;
@@ -132,9 +152,12 @@ void prfm_map_params_init(struct prfm_map_params *mp,
 void prfm_map_params_print(const struct prfm_map_params *mp) {
   message(
       "PRFM face-on map: %d x %d pixels of %e, half-width %e, slab half-height "
-      "%e, R_cyl %e (internal units); centre (%e, %e, %e) %s; rho_d %s",
+      "%e, %s cylinder of radius %e (internal units), particle's own mass "
+      "%s Sigma_g; centre (%e, %e, %e) %s; rho_d %s",
       mp->npix, mp->npix, mp->pixel, mp->half_width, mp->half_height,
-      mp->R_cyl, mp->centre[0], mp->centre[1], mp->centre[2],
+      mp->spline ? "cubic-spline" : "top-hat", mp->R_cyl,
+      mp->exclude_own_mass ? "left out of" : "included in", mp->centre[0],
+      mp->centre[1], mp->centre[2],
       mp->centre_is_absolute ? "absolute" : "relative to the box centre",
       mp->use_dark_matter ? "from the Hernquist potential" : "= 0");
 }
@@ -187,12 +210,17 @@ void prfm_map_build(struct engine *e, const struct prfm_map_params *mp) {
   prfm_map.periodic = s->periodic;
   prfm_map.pixel = mp->pixel;
   prfm_map.R_cyl = mp->R_cyl;
+  prfm_map.spline = mp->spline;
+  prfm_map.exclude_own_mass = mp->exclude_own_mass;
   prfm_map.nk = (int)ceil(mp->R_cyl * inv_pixel);
   prfm_map.potential = mp->use_dark_matter ? e->external_potential : NULL;
 
-  /* Gas */
+  /* Gas, recording where each particle deposited which mass */
   for (size_t k = 0; k < s->nr_parts; k++) {
     const struct part *p = &s->parts[k];
+    struct xpart *xp = &s->xparts[k];
+    xp->sf_data.map_pixel = -1;
+    xp->sf_data.map_mass = 0.f;
     if (p->time_bin == time_bin_inhibited ||
         p->time_bin == time_bin_not_created)
       continue;
@@ -203,7 +231,10 @@ void prfm_map_build(struct engine *e, const struct prfm_map_params *mp) {
     const int i = (int)floor((dx + half) * inv_pixel);
     const int j = (int)floor((dy + half) * inv_pixel);
     if (i < 0 || i >= npix || j < 0 || j >= npix) continue;
-    data[PRFM_MAP_NFIELD * ((size_t)i * npix + j)] += hydro_get_mass(p);
+    const float m = hydro_get_mass(p);
+    data[PRFM_MAP_NFIELD * ((size_t)i * npix + j)] += m;
+    xp->sf_data.map_pixel = i * npix + j;
+    xp->sf_data.map_mass = m;
   }
 
   /* Stars */
@@ -241,10 +272,12 @@ void prfm_map_build(struct engine *e, const struct prfm_map_params *mp) {
 }
 
 /**
- * @brief 2D cubic spline of compact support 1, unnormalised.
+ * @brief 2D cubic spline of compact support 1, unnormalised, or a top hat
+ * of radius 1.
  */
-static double prfm_map_kernel(const double q) {
+static double prfm_map_kernel(const double q, const int spline) {
   if (q >= 1.) return 0.;
+  if (!spline) return 1.;
   if (q < 0.5) return 1. - 6. * q * q + 6. * q * q * q;
   const double y = 1. - q;
   return 2. * y * y * y;
@@ -255,15 +288,22 @@ static double prfm_map_kernel(const double q) {
  * density at a position (internal units).
  *
  * All four are 0 before the first map is built and for positions whose
- * cylinder contains no map pixel.
+ * cylinder contains no map pixel. With exclude_own_mass, own_mass is taken
+ * out of pixel own_pixel before it is weighted, so that Sigma_g is the
+ * column of the other gas particles; the weight is the one the deposited
+ * mass receives, since it depends only on the pixel centre and x.
  *
  * @param x The position.
+ * @param own_pixel Pixel in which the particle deposited its mass in the
+ * last prfm_map_build() (-1: none; a star, or a gas particle off the map).
+ * @param own_mass The mass it deposited there.
  * @param Sigma_g (return) Gas surface density.
  * @param Sigma_s (return) Stellar surface density.
  * @param sigma_sz (return) Stellar vertical velocity dispersion.
  * @param rho_d (return) Dark matter density of the Hernquist halo.
  */
-void prfm_map_sample(const double x[3], double *Sigma_g, double *Sigma_s,
+void prfm_map_sample(const double x[3], const int own_pixel,
+                     const float own_mass, double *Sigma_g, double *Sigma_s,
                      double *sigma_sz, double *rho_d) {
 
   *Sigma_g = 0.;
@@ -287,6 +327,8 @@ void prfm_map_sample(const double x[3], double *Sigma_g, double *Sigma_s,
   const int i0 = (int)floor(px / pixel);
   const int j0 = (int)floor(py / pixel);
   const int nk = prfm_map.nk;
+  const int spline = prfm_map.spline;
+  const int skip = prfm_map.exclude_own_mass ? own_pixel : -1;
 
   double wsum = 0., mg = 0., ms = 0., mv = 0., mv2 = 0.;
   for (int i = i0 - nk; i <= i0 + nk; i++) {
@@ -295,11 +337,14 @@ void prfm_map_sample(const double x[3], double *Sigma_g, double *Sigma_s,
     for (int j = j0 - nk; j <= j0 + nk; j++) {
       if (j < 0 || j >= npix) continue;
       const double dy = (j + 0.5) * pixel - py;
-      const double w = prfm_map_kernel(sqrt(dx * dx + dy * dy) * inv_R);
+      const double w = prfm_map_kernel(sqrt(dx * dx + dy * dy) * inv_R, spline);
       if (w <= 0.) continue;
       const double *pix = &data[PRFM_MAP_NFIELD * ((size_t)i * npix + j)];
+      double m_gas = pix[0];
+      /* The difference is exactly 0 if the particle is alone in its pixel */
+      if (i * npix + j == skip) m_gas = fmax(m_gas - (double)own_mass, 0.);
       wsum += w;
-      mg += w * pix[0];
+      mg += w * m_gas;
       ms += w * pix[1];
       mv += w * pix[2];
       mv2 += w * pix[3];

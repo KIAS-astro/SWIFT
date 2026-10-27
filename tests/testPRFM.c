@@ -69,6 +69,21 @@
  *    int_-Z^Z w(z; H) dz / (2 Z w(0; H)), H / (2.8 Z) for Z >= H (1e-6);
  *  - the equilibrium correction returns Sigma_g of a sech^2 layer from its
  *    estimate f(H_k / H_g) Sigma_g (1e-6).
+ *
+ * The face-on map (src/prfm_map.c; built with --with-star-formation=PRFM
+ * only), 100 pc pixels, on sheets of gas particles at uniformly random
+ * positions (seeded) with Sigma = 50 Msun/pc^2 at m_g = 1.6e6 and
+ * 1.3e7 Msun, about 5e4 and 1e5 particles:
+ *  - the mean over particles of Sigma_g without the own mass equals the
+ *    sheet's Sigma for the top hat of 1 kpc^2 and the 500 pc spline, at both
+ *    masses (1e-2; the other particles of a random sheet are distributed as
+ *    the sheet, so their column is unbiased at any m_g);
+ *  - the own-mass term, Sigma_g with the own mass less Sigma_g without it,
+ *    averaged over particles: m_g / (pi R^2) for the top hat (5e-2: the
+ *    pixel count inside R varies with the position in the pixel) and
+ *    m_g 40 / (7 pi R^2) for the spline (range 0.9-1: the spline is
+ *    sampled at the pixel centre, w = 1 - 6 q^2 + ..., not at q = 0);
+ *  - a particle alone on the map has Sigma_g = 0 without its own mass.
  */
 
 #include <config.h>
@@ -81,6 +96,18 @@
 #include <stdio.h>
 
 #include "kernel_hydro.h"
+
+#ifdef STAR_FORMATION_PRFM
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "engine.h"
+#include "hydro.h"
+#include "part.h"
+#include "prfm_map.h"
+#include "space.h"
+#endif
 
 /* Units of the Python reference */
 static const double msun = 1.98841e33;
@@ -156,6 +183,79 @@ static void check_range(const char *name, const double measured,
          name, measured, lo, hi);
   if (!ok) n_fail++;
 }
+
+#ifdef STAR_FORMATION_PRFM
+/* Uniform deviate in [0, 1) (splitmix64) */
+static double uniform(uint64_t *state) {
+  uint64_t z = (*state += 0x9E3779B97F4A7C15ULL);
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+  z ^= z >> 31;
+  return (z >> 11) * (1. / 9007199254740992.);
+}
+
+/*
+ * Face-on map of n gas particles of mass m at uniformly random positions in
+ * the midplane of a square of half-width hw (kpc, Msun). Returns the mean
+ * over the particles of Sigma_g without the own mass and of the own-mass
+ * term, and the sheet's Sigma = n m / A (Msun / kpc^2).
+ */
+static void map_sheet(const size_t n, const double m, const double hw,
+                      const int spline, const double R, const uint64_t seed,
+                      double *excl, double *own, double *Sigma) {
+
+  struct part *parts = (struct part *)calloc(n, sizeof(struct part));
+  struct xpart *xparts = (struct xpart *)calloc(n, sizeof(struct xpart));
+  if (parts == NULL || xparts == NULL) error("Failed to allocate the sheet");
+  uint64_t st = seed;
+  for (size_t k = 0; k < n; k++) {
+    parts[k].x[0] = (2. * uniform(&st) - 1.) * hw;
+    parts[k].x[1] = (2. * uniform(&st) - 1.) * hw;
+    parts[k].x[2] = 0.;
+    hydro_set_mass(&parts[k], (float)m);
+  }
+
+  struct space s;
+  memset(&s, 0, sizeof(s));
+  s.parts = parts;
+  s.xparts = xparts;
+  s.nr_parts = n;
+  s.periodic = 0;
+  for (int i = 0; i < 3; i++) s.dim[i] = 2. * hw;
+  struct engine e;
+  memset(&e, 0, sizeof(e));
+  e.s = &s;
+
+  struct prfm_map_params mp;
+  memset(&mp, 0, sizeof(mp));
+  mp.centre_is_absolute = 1;
+  mp.pixel = 0.1;
+  mp.R_cyl = R;
+  mp.spline = spline;
+  mp.exclude_own_mass = 1;
+  mp.half_height = 1.;
+  mp.half_width = hw;
+  mp.npix = (int)ceil(2. * hw / mp.pixel - 1e-6);
+  prfm_map_build(&e, &mp);
+
+  double sum_excl = 0., sum_own = 0.;
+  for (size_t k = 0; k < n; k++) {
+    double Sg_ex, Sg_in, Ss, sz, rho_d;
+    prfm_map_sample(parts[k].x, xparts[k].sf_data.map_pixel,
+                    xparts[k].sf_data.map_mass, &Sg_ex, &Ss, &sz, &rho_d);
+    prfm_map_sample(parts[k].x, -1, 0.f, &Sg_in, &Ss, &sz, &rho_d);
+    sum_excl += Sg_ex;
+    sum_own += Sg_in - Sg_ex;
+  }
+  const double side = mp.npix * mp.pixel;
+  *excl = sum_excl / n;
+  *own = sum_own / n;
+  *Sigma = n * m / (side * side);
+  prfm_map_clean();
+  free(parts);
+  free(xparts);
+}
+#endif
 
 int main(int argc, char *argv[]) {
 
@@ -557,6 +657,52 @@ int main(int argc, char *argv[]) {
       check(name, got, Sg, 1e-6);
     }
   }
+
+#ifdef STAR_FORMATION_PRFM
+  /* Face-on map: the own mass left out of Sigma_g */
+  {
+    const double Sigma_pc2 = 50.; /* Msun / pc^2 */
+    const double masses[2] = {1.6e6, 1.3e7};
+    const double hws[2] = {20., 80.}; /* kpc: 5e4 and 1e5 particles */
+    const double R_top = 1. / sqrt(M_PI), R_spl = 0.5;
+    double excl_top[2];
+    for (int i = 0; i < 2; i++) {
+      const double m = masses[i];
+      const size_t n =
+          (size_t)round(Sigma_pc2 * 1e6 * 4. * hws[i] * hws[i] / m);
+      for (int spline = 0; spline <= 1; spline++) {
+        const double R = spline ? R_spl : R_top;
+        double excl, own, Sigma;
+        map_sheet(n, m, hws[i], spline, R, 12345 + i, &excl, &own, &Sigma);
+        if (!spline) excl_top[i] = excl;
+        char name[96];
+        sprintf(name, "map, %s, m_g = %.2g: mean Sigma_g without own / Sigma",
+                spline ? "spline 500 pc" : "top hat 1 kpc^2", m);
+        check(name, excl / Sigma, 1., 1e-2);
+        if (spline) {
+          sprintf(name, "map, spline 500 pc, m_g = %.2g: own / (40 m / 7piR^2)",
+                  m);
+          check_range(name, own / (40. * m / (7. * M_PI * R * R)), 0.9, 1.);
+        } else {
+          sprintf(name, "map, top hat 1 kpc^2, m_g = %.2g: own / (m / pi R^2)",
+                  m);
+          check(name, own / (m / (M_PI * R * R)), 1., 5e-2);
+        }
+        printf("     own-mass term %.4g Msun/pc^2 = %.3f of the sheet\n",
+               own * 1e-6, own / Sigma);
+      }
+    }
+    check("map, top hat: mean Sigma_g without own, m_g = 1.3e7 / 1.6e6",
+          excl_top[1] / excl_top[0], 1., 1e-2);
+
+    /* One particle alone on the map */
+    double excl, own, Sigma;
+    map_sheet(1, 1.3e7, 2., 0, R_top, 1, &excl, &own, &Sigma);
+    check_range("map: Sigma_g without own mass, particle alone", excl, 0., 0.);
+    check("map: own-mass term, particle alone, / (m / pi R^2)",
+          own / (1.3e7 / (M_PI * R_top * R_top)), 1., 5e-2);
+  }
+#endif
 
   if (n_fail) {
     printf("%d checks failed\n", n_fail);

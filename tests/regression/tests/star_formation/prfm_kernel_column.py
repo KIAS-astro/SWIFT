@@ -31,8 +31,11 @@ Checks:
   3. the same against the continuum slab of thickness T (3 per cent: the
      midpoint error of replacing the continuous slab by N_z layers, which
      grows as dz / H_k; reported);
-  4. the map value PRFMMapGasSurfaceDensities equals Sigma (1e-3, as
-     prfm_slab);
+  4. the map value PRFMMapGasSurfaceDensities equals Sigma less the
+     particle's own share, m_g / (N_in A_pix) for the top hat of radius
+     500 pc over the N_in on-map pixel centres within it (the map leaves the
+     particle's own mass out; the share is 2.8e-3 / N_z of Sigma at most)
+     (1e-5: float32 fields);
   5. kernel_column_correction = constant (N_z = 7): written Sigma = Sigma_est
      / 0.65 (1e-5); = equilibrium (N_z = 7): written Sigma satisfies
      Sigma f(H_k / H_g) = Sigma_est with the written H_g and f of a sech^2
@@ -99,6 +102,15 @@ def bias_sech2(x, n=4000):
     return du / 3 * (g[0] + g[-1] + 4 * g[1:-1:2].sum() + 2 * g[2:-1:2].sum()) / w_proj(0.0, x)
 
 
+def own_share(x_kpc, y_kpc, m, pixel=0.1, R=0.5):
+    """Own-mass term of the face-on top hat at (x, y), map over [0, LX]^2 [mass/area]."""
+    c = (np.arange(int(round(LX / pixel))) + 0.5) * pixel
+    dx2 = (c[None, :] - x_kpc[:, None]) ** 2
+    dy2 = (c[None, :] - y_kpc[:, None]) ** 2
+    n_in = (dx2[:, :, None] + dy2[:, None, :] < R * R).sum(axis=(1, 2))
+    return m / (n_in * (pixel * units.KPC) ** 2)
+
+
 def write_slab(path, nz, dz):
     dx = LX / NX
     x = (np.arange(NX) + 0.5) * dx
@@ -152,8 +164,11 @@ def analyze(ctx):
     for name, (nz, fdz, corr) in RUNS.items():
         dz = fdz * DZ * units.KPC
         snap = snapshots(ctx.path(name))[-1]
-        z = snap.read(0, "Coordinates")[:, 2]
+        pos = snap.read(0, "Coordinates")
+        z = pos[:, 2]
         mid = np.abs(z - 0.5 * LZ * units.KPC) < 0.25 * dz
+        own = own_share(pos[mid, 0] / units.KPC, pos[mid, 1] / units.KPC,
+                        snap.read(0, "Masses")[mid])
         rho = snap.read(0, "Densities")[mid]
         H = GAMMA_K * snap.read(0, "SmoothingLengths")[mid]
         Sg = snap.read(0, "PRFMGasSurfaceDensities")[mid]
@@ -172,9 +187,10 @@ def analyze(ctx):
                             np.abs(Sg / want - 1).max(),
                             1e-4 if corr == "equilibrium" else 1e-5, kind="max",
                             source=src + f"; correction {corr}"))
-        checks.append(Check(f"{name}: max |map Sigma_g / Sigma - 1|",
-                            np.abs(Smap / Sigma - 1).max(), 1e-3, kind="max",
-                            source=src + "; uniform layer seen by the map"))
+        checks.append(Check(f"{name}: max |map Sigma_g / (Sigma - own share) - 1|",
+                            np.abs(Smap / (Sigma - own) - 1).max(), 1e-5, kind="max",
+                            source=src + "; uniform layer seen by the map, own mass "
+                                   f"left out (share up to {(own / Sigma).max():.2g})"))
         if corr != "none":
             continue
         T = nz * dz

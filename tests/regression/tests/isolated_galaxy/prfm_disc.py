@@ -18,6 +18,12 @@ back into the halo). The PRFM face-on map is centred on the box centre (the
 potential's centre) with the disc normal along z; rho_d comes from the same
 Hernquist halo.
 
+The runs below up to ok22_vol use J26's face-on cylinder: 2D cubic spline of
+support 500 pc, the particle's own mass included (cylinder_kernel = spline,
+cylinder_radius_kpc = 0.5, exclude_own_mass = 0), as before those options
+existed. The runs from ok22_fix use the module defaults: a top hat of 1 kpc^2
+(radius 1 / sqrt(pi) kpc) without the particle's own mass.
+
 Runs (SWIFT_REG_PRFM_RUNS, comma-separated; default all):
   ok22      OK22 calibration, threshold n_H >= 0.13 cm^-3 on the measured density
   ok22_eq   OK22, threshold on the equilibrium density Sigma_g / (2 H_g 1.4 m_H)
@@ -37,6 +43,11 @@ Runs (SWIFT_REG_PRFM_RUNS, comma-separated; default all):
             P_eff of the EoS at the measured density, t_dyn of J26 eq. 26 with
             rho_* = Sigma_* / (2 H_*), H_* / H_g = sigma_*z / sigma_eff from
             the map, R_f = 2; the PRFM-int state is still written
+  ok22_fix    OK22, Sigma_g, Sigma_*, sigma_*z from the face-on top hat of
+              1 kpc^2 without the particle's own mass
+  ok22_kc116  OK22, Sigma_g from the kernel column, uncorrected, t_dep divided
+              by 1.16 (kernel_column_rate_factor; ai-notes prfm-method-spec.md
+              Sec. 4.2); Sigma_*, sigma_*z from the face-on top hat of 1 kpc^2
 Resolution: SWIFT_REG_ISOGAL_RES = H12_m1.6e6 (default) or H12_m1.3e7.
 Length: SWIFT_REG_PRFM_TEND_MYR (default 1000), snapshots every 10 Myr.
 SPH h_max: SWIFT_REG_ISOGAL_HMAX [kpc] (default 10); particles in outflows
@@ -94,6 +105,16 @@ ALL_RUNS = {
                     "surface_density_estimator": "kernel_column",
                     "kernel_column_correction": "equilibrium"}, "OK22", None),
 }
+J26_CYLINDER = {"cylinder_kernel": "spline", "cylinder_radius_kpc": 0.5,
+                "exclude_own_mass": 0}
+for _sf, _cal, _z in ALL_RUNS.values():
+    _sf.update(J26_CYLINDER)
+ALL_RUNS.update({
+    "ok22_fix": ({"calibration": "OK22", "threshold": "measured"}, "OK22", None),
+    "ok22_kc116": ({"calibration": "OK22", "threshold": "measured",
+                    "surface_density_estimator": "kernel_column",
+                    "kernel_column_rate_factor": 1.16}, "OK22", None),
+})
 _only = os.environ.get("SWIFT_REG_PRFM_RUNS")
 RUNS = {k: v for k, v in ALL_RUNS.items() if not _only or k in _only.split(",")}
 
@@ -182,7 +203,7 @@ def run(ctx):
         p["PRFMStarFormation"] = dict(
             sf, threshold_n_H_p_cm3=0.13, use_dark_matter=1,
             disc_centre=[0.0, 0.0, 0.0], disc_centre_is_absolute=0, pixel_kpc=0.1,
-            cylinder_radius_kpc=0.5, half_height_kpc=1.0, map_half_width_kpc=25.0)
+            half_height_kpc=1.0, map_half_width_kpc=25.0)
         ctx.swift(p, ["--hydro", "--self-gravity", "--external-gravity", "--stars",
                       "--star-formation", "--cooling", "--limiter", "--sync"],
                   subdir=name, name=name, timeout=12 * 3600)
@@ -238,8 +259,9 @@ def state_checks(name, snap):
     Identities (float32 fields, relative rounding 6e-8 each; tolerance 1e-5):
     W = J26 eq. 31 of the written Sigma_g, Sigma_*, rho_d, sigma_eff,
     sigma_*z; SFR = m_g / t_dep; rho_eq = W / sigma_eff^2,
-    H_g = Sigma_g / (2 rho_eq); for PRFM-int t_dep = Upsilon(W) Sigma_g / W
-    and t_dyn = 2 H_g / sigma_eff. For PRFM-vol (ok22_vol) the density the
+    H_g = Sigma_g / (2 rho_eq); for PRFM-int t_dep = Upsilon(W) Sigma_g / W,
+    divided by kernel_column_rate_factor in ok22_kc116, and
+    t_dyn = 2 H_g / sigma_eff. For PRFM-vol (ok22_vol) the density the
     rate used is recovered from t_dep / t_dyn = Upsilon(P) / (R_f sigma(P))
     and the EoS, and t_dyn must equal J26 eq. 26 at that density with the
     written Sigma_*, sigma_*z, rho_d (tolerance 1e-5: the inversion raises
@@ -255,6 +277,7 @@ def state_checks(name, snap):
     star-forming particle has n_H,eq >= 0.13 cm^-3.
     """
     sf_cal = ALL_RUNS[name][0]["calibration"]
+    rate_factor = ALL_RUNS[name][0].get("kernel_column_rate_factor", 1.0)
     sfr = snap.read(0, "StarFormationRates")
     sf = sfr > 0
     m = snap.read(0, "Masses")[sf]
@@ -283,8 +306,8 @@ def state_checks(name, snap):
                       vol_t_dyn(rho_used, Ss, rho_d, sig_sz), 1e-5))
     else:
         tests += [
-            ("t_dep / (Upsilon Sigma_g / W)", t_dep,
-             upsilon(W, sf_cal, zprime) * Sg / W, 1e-5),
+            ("t_dep / (Upsilon Sigma_g / W / rate factor)", t_dep,
+             upsilon(W, sf_cal, zprime) * Sg / W / rate_factor, 1e-5),
             ("t_dyn / (2 H_g / sigma_eff)", t_dyn, 2 * H / sig, 1e-5)]
     out = []
     if vol:

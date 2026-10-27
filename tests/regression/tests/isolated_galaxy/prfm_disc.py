@@ -48,7 +48,9 @@ Runs (SWIFT_REG_PRFM_RUNS, comma-separated; default all):
   ok22_kc116  OK22, Sigma_g from the kernel column, uncorrected, t_dep divided
               by 1.16 (kernel_column_rate_factor; ai-notes prfm-method-spec.md
               Sec. 4.2); Sigma_*, sigma_*z from the face-on top hat of 1 kpc^2
-Resolution: SWIFT_REG_ISOGAL_RES = H12_m1.6e6 (default) or H12_m1.3e7.
+Resolution: SWIFT_REG_ISOGAL_RES = H12_m1.6e6 (default) or H12_m1.3e7, or
+H12_m2e5 (2e5 Msun, softening 0.25 kpc; make_ics.py M5_disk.hdf5 2), the
+high-resolution reference for the surface-density estimators.
 Length: SWIFT_REG_PRFM_TEND_MYR (default 1000), snapshots every 10 Myr.
 SPH h_max: SWIFT_REG_ISOGAL_HMAX [kpc] (default 10); particles in outflows
 and in a hot CGM need h > 10 kpc.
@@ -79,7 +81,7 @@ BUILDS = {"prfm": ["--with-cooling=EAGLE", "--with-chemistry=EAGLE",
                    "--with-ext-potential=hernquist"]}
 
 RES = os.environ.get("SWIFT_REG_ISOGAL_RES", "H12_m1.6e6")
-SOFTENING = {"H12_m1.6e6": 0.5, "H12_m1.3e7": 1.0}[RES]
+SOFTENING = {"H12_m2e5": 0.25, "H12_m1.6e6": 0.5, "H12_m1.3e7": 1.0}[RES]
 IC_NAME = f"{RES}_disk.hdf5"
 MYR_INTERNAL = units.MYR / units.UNIT_TIME
 T_END_MYR = float(os.environ.get("SWIFT_REG_PRFM_TEND_MYR", "1000"))

@@ -49,6 +49,15 @@
  *    Sigma_gas, Sigma_sp through the weight with the K24 calibration, and
  *    W / Upsilon_tot against Table 2 Sigma_SFR. See the comment there.
  *
+ * PRFM-vol (prfm_vol):
+ *  - gas only: t_dyn = 2 / (2 pi G rho)^(1/2) (1e-12), which J26 after
+ *    eq. 13 calls 1.47 t_ff (half a unit in the last printed digit);
+ *  - P_eff, sigma_eff, t_dep = Upsilon t_dyn / (R_f sigma_eff) and the R_f
+ *    scaling at n_H = 1 cm^-3 (1e-12);
+ *  - with stars and dark matter, t_dyn against J26 eq. 13 written with
+ *    rho_* = Sigma_* / (2 H_*), H_* / H_g = sigma_*z / sigma_eff and solved by
+ *    bisection (1e-10).
+ *
  * The kernel-column estimate of the gas surface density:
  *  - w(z; H) of prfm_kernel_projected against 2 pi int_z^H W(r) r dr of the
  *    build's kernel_eval_double (1e-6; the kernel constants are floats);
@@ -418,6 +427,64 @@ int main(int argc, char *argv[]) {
     }
     check_range("K24 TIGRESS: fraction with |Sigma_SFR error| <= 0.5",
                 n_within / 18., 0.8, 1.);
+  }
+
+  /* PRFM-vol */
+  {
+    const double G = PRFM_NEWTON_G_CGS;
+    const double mu = PRFM_MASS_PER_H * PRFM_PROTON_MASS_CGS;
+    struct prfm_state s, s1;
+
+    /* Gas only: t_dyn = 2 / (2 pi G rho)^(1/2), 1.47 t_ff (J26 after eq. 13) */
+    const double rho1 = 1. * mu;
+    prfm_vol(rho1, 0., 0., -1., &ok22, 1., 2., &s);
+    check("vol, gas only: t_dyn = 2 / (2 pi G rho)^1/2", s.t_dyn,
+          2. / sqrt(2. * M_PI * G * rho1), 1e-12);
+    check("vol, gas only: t_dyn / t_ff (J26: 1.47)",
+          s.t_dyn / sqrt(3. * M_PI / (32. * G * rho1)), 1.47, 0.005 / 1.47);
+    check("vol: P_eff(n_H = 1) / k_B = 4.7e4 [K cm^-3]", s.W / P_unit, 4.7e4,
+          1e-12);
+    check("vol: sigma_eff = 12 km/s (4.7)^0.22", s.sigma_eff,
+          12e5 * pow(4.7, 0.22), 1e-12);
+    check("vol: t_dep = Upsilon t_dyn / (2 sigma_eff)", s.t_dep,
+          prfm_upsilon(s.W, &ok22, 1.) * s.t_dyn / (2. * s.sigma_eff), 1e-12);
+    prfm_vol(rho1, 0., 0., -1., &ok22, 1., 1., &s1);
+    check("vol: t_dep(R_f = 1) / t_dep(R_f = 2)", s1.t_dep / s.t_dep, 2.,
+          1e-12);
+
+    /* Stars and dark matter: J26 eq. 13, t_dyn = (2 / pi G)^(1/2)
+     * [rho_g + 2 rho_* / (1 + H_g / H_*) + (2/3) rho_d]^(-1/2), with
+     * H_g = sigma_eff t_dyn / 2, H_* = (sigma_*z / sigma_eff) H_g and
+     * rho_* = Sigma_* / (2 H_*), solved by bisection in t_dyn */
+    const double rhos[3] = {0.2, 1., 30.};
+    const double Sss[3] = {30., 50., 300.};
+    const double szs[3] = {15., 25., 40.};
+    for (int i = 0; i < 3; i++) {
+      const double rho_g = rhos[i] * mu;
+      const double Ss = Sss[i] * Sigma_unit;
+      const double sz = szs[i] * kms;
+      const double rho_d = 0.01 * rho_unit;
+      prfm_vol(rho_g, Ss, rho_d, sz, &ok22, 1., 2., &s);
+      const double sig = s.sigma_eff;
+      double lo = 1e10, hi = 1e18;
+      for (int it = 0; it < 200; it++) {
+        const double t = sqrt(lo * hi);
+        const double Hg = 0.5 * sig * t;
+        const double Hs = sz / sig * Hg;
+        const double rho_s = Ss / (2. * Hs);
+        const double t13 = sqrt(2. / (M_PI * G)) /
+                           sqrt(rho_g + 2. * rho_s / (1. + Hg / Hs) +
+                                2. / 3. * rho_d);
+        if (t13 > t)
+          lo = t;
+        else
+          hi = t;
+      }
+      char name[80];
+      sprintf(name, "vol: t_dyn vs J26 eq. 13 (n_H = %g, Sigma_* = %g)",
+              rhos[i], Sss[i]);
+      check(name, s.t_dyn, sqrt(lo * hi), 1e-10);
+    }
   }
 
   /* Kernel column of the build's kernel */

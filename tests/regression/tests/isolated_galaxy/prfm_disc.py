@@ -33,6 +33,10 @@ Runs (SWIFT_REG_PRFM_RUNS, comma-separated; default all):
   ok22_kc_const  the same divided by 0.65 (kernel_column_correction = constant)
   ok22_kc_eq     the same corrected for the equilibrium thickness
                  (kernel_column_correction = equilibrium)
+  ok22_vol  OK22, rate from PRFM-vol (formulation = vol, J26 Secs. 2.4-2.5):
+            P_eff of the EoS at the measured density, t_dyn of J26 eq. 26 with
+            rho_* = Sigma_* / (2 H_*), H_* / H_g = sigma_*z / sigma_eff from
+            the map, R_f = 2; the PRFM-int state is still written
 Resolution: SWIFT_REG_ISOGAL_RES = H12_m1.6e6 (default) or H12_m1.3e7.
 Length: SWIFT_REG_PRFM_TEND_MYR (default 1000), snapshots every 10 Myr.
 SPH h_max: SWIFT_REG_ISOGAL_HMAX [kpc] (default 10); particles in outflows
@@ -84,6 +88,8 @@ ALL_RUNS = {
     "ok22_kc_const": ({"calibration": "OK22", "threshold": "measured",
                        "surface_density_estimator": "kernel_column",
                        "kernel_column_correction": "constant"}, "OK22", None),
+    "ok22_vol": ({"calibration": "OK22", "threshold": "measured",
+                  "formulation": "vol"}, "OK22", None),
     "ok22_kc_eq": ({"calibration": "OK22", "threshold": "measured",
                     "surface_density_estimator": "kernel_column",
                     "kernel_column_correction": "equilibrium"}, "OK22", None),
@@ -106,6 +112,37 @@ def sigma_eff(W, cal, zprime):
     if cal == "K24":
         return 11.7e5 * w4 ** 0.12 * np.maximum(zprime, 0.1) ** 0.03
     return 12e5 * np.maximum(w4, 1.0) ** 0.22
+
+
+def weight(Sg, Ss, rho_d, sig, sig_sz, c_d=16 * np.pi / 3):
+    """J26 eq. 31 [erg/cm^3], cgs arrays; c_d = 16 pi / 3, the module default."""
+    G = units.G_NEWTON
+    Seff = Sg + 2 * Ss / (1 + sig_sz / sig)
+    x = c_d * G * rho_d * sig ** 2 / (np.pi * G * Seff) ** 2
+    return 0.25 * np.pi * G * Sg * Seff * (1 + np.sqrt(1 + x))
+
+
+def vol_density(t_dep, t_dyn, R_f=2.0):
+    """Gas density [g/cm^3] that PRFM-vol (OK22, J26 EoS) used, from its t_dep / t_dyn.
+
+    t_dep / t_dyn = Upsilon(P) / (R_f sigma_eff(P)) = (1028 / 12) x^-0.212 / R_f
+    for x = P / P_0 <= 1 and (1028 / 12) x^-0.432 / R_f above; then
+    P / k_B = 4.7e4 n_H^1.8, n_H = rho / (1.4 m_H).
+    """
+    r = R_f * t_dep / t_dyn / (1028.0 / 12.0)
+    x = np.where(r >= 1, r ** (-1 / 0.212), r ** (-1 / 0.432))
+    n_H = (x * 1e4 / 4.7e4) ** (1 / 1.8)
+    return n_H * 1.4 * units.PROTON_MASS
+
+
+def vol_t_dyn(rho_g, Ss, rho_d, sig_sz):
+    """J26 eq. 26 with rho_* = Sigma_* / (2 H_*), H_* / H_g = sigma_*z / sigma_eff [s]."""
+    G = units.G_NEWTON
+    P = 4.7e4 * units.BOLTZMANN_K * (rho_g / (1.4 * units.PROTON_MASS)) ** 1.8
+    sig = sigma_eff(P, "OK22", 1.0)
+    A = 2 * np.pi * G * rho_g + 4 * np.pi / 3 * G * rho_d
+    B = 4 * np.pi * G * Ss / (sig + sig_sz)
+    return 8 / (B + np.sqrt(B * B + 16 * A))
 
 
 def ic_file(data_dir):
@@ -199,8 +236,18 @@ def state_checks(name, snap):
 
     All fields of a particle are written at the same step as its SFR.
     Identities (float32 fields, relative rounding 6e-8 each; tolerance 1e-5):
-    SFR = m_g W / (Upsilon(W) Sigma_g), rho_eq = W / sigma_eff^2,
-    H_g = Sigma_g / (2 rho_eq). sigma_eff = sigma_eff(W) holds only to the
+    W = J26 eq. 31 of the written Sigma_g, Sigma_*, rho_d, sigma_eff,
+    sigma_*z; SFR = m_g / t_dep; rho_eq = W / sigma_eff^2,
+    H_g = Sigma_g / (2 rho_eq); for PRFM-int t_dep = Upsilon(W) Sigma_g / W
+    and t_dyn = 2 H_g / sigma_eff. For PRFM-vol (ok22_vol) the density the
+    rate used is recovered from t_dep / t_dyn = Upsilon(P) / (R_f sigma(P))
+    and the EoS, and t_dyn must equal J26 eq. 26 at that density with the
+    written Sigma_*, sigma_*z, rho_d (tolerance 1e-5: the inversion raises
+    t_dep / t_dyn to the power -1 / (1.8 x 0.432), which multiplies its
+    rounding by 1.3, and t_dyn goes as rho^-1/2; measured 1.2e-7); the
+    recovered density must match the written Densities to 10 per cent in the
+    median, since inactive particles have drifted since their last active
+    step. sigma_eff = sigma_eff(W) holds only to the
     convergence of the 5 fixed-point iterations: each one multiplies the
     error by at most d ln sigma / d ln W = beta <= 0.22, so 5 leave
     0.22^5 = 5e-4 of the initial error, which is at most a factor 3
@@ -217,14 +264,35 @@ def state_checks(name, snap):
     sig = snap.read(0, "PRFMEffectiveDispersions")[sf]
     rho_eq = snap.read(0, "PRFMEquilibriumDensities")[sf]
     H = snap.read(0, "PRFMEquilibriumScaleHeights")[sf]
+    Ss = snap.read(0, "PRFMStellarSurfaceDensities")[sf]
+    sig_sz = snap.read(0, "PRFMStellarVerticalDispersions")[sf]
+    rho_d = snap.read(0, "PRFMDarkMatterDensities")[sf]
+    t_dep = snap.read(0, "PRFMDepletionTimes")[sf]
+    t_dyn = snap.read(0, "PRFMDynamicalTimes")[sf]
     src = f"{name}: {sf.sum()} star-forming particles, last snapshot"
+    tests = [
+        ("W / J26 eq. 31", W, weight(Sg, Ss, rho_d, sig, sig_sz), 1e-5),
+        ("SFR / (m_g / t_dep)", sfr[sf], m / t_dep, 1e-5),
+        ("rho_eq / (W / sigma_eff^2)", rho_eq, W / sig ** 2, 1e-5),
+        ("H_g / (Sigma_g / 2 rho_eq)", H, Sg / (2 * rho_eq), 1e-5),
+        ("sigma_eff / sigma_eff(W)", sig, sigma_eff(W, sf_cal, zprime), 2e-3)]
+    vol = ALL_RUNS[name][0].get("formulation") == "vol"
+    if vol:
+        rho_used = vol_density(t_dep, t_dyn)
+        tests.append(("t_dyn / J26 eq. 26", t_dyn,
+                      vol_t_dyn(rho_used, Ss, rho_d, sig_sz), 1e-5))
+    else:
+        tests += [
+            ("t_dep / (Upsilon Sigma_g / W)", t_dep,
+             upsilon(W, sf_cal, zprime) * Sg / W, 1e-5),
+            ("t_dyn / (2 H_g / sigma_eff)", t_dyn, 2 * H / sig, 1e-5)]
     out = []
-    for label, got, want, tol in (
-            ("SFR / (m_g W / (Upsilon Sigma_g))", sfr[sf],
-             m * W / (upsilon(W, sf_cal, zprime) * Sg), 1e-5),
-            ("rho_eq / (W / sigma_eff^2)", rho_eq, W / sig ** 2, 1e-5),
-            ("H_g / (Sigma_g / 2 rho_eq)", H, Sg / (2 * rho_eq), 1e-5),
-            ("sigma_eff / sigma_eff(W)", sig, sigma_eff(W, sf_cal, zprime), 2e-3)):
+    if vol:
+        rho = snap.read(0, "Densities")[sf]
+        out.append(Check(f"{name}: median |rho used / Densities - 1|",
+                         np.median(np.abs(rho_used / rho - 1)), 0.1, kind="max",
+                         source=src + "; drift since the last active step"))
+    for label, got, want, tol in tests:
         out.append(Check(f"{name}: max |{label} - 1|",
                          np.abs(got / want - 1).max(), tol, kind="max",
                          source=src))

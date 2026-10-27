@@ -87,7 +87,10 @@ __attribute__((always_inline)) INLINE static int star_formation_write_particles(
   list[5] = io_make_output_field(
       "PRFMWeights", FLOAT, 1, UNIT_CONV_PRESSURE, 0.f, xparts, sf_data.W,
       "PRFM weight W of the gas column (J26 eq. 31), the equilibrium midplane "
-      "pressure, at the particle's last active step.");
+      "pressure, at the particle's last active step. Written for every gas "
+      "particle, star-forming or not, and in both rate formulations (a "
+      "diagnostic with PRFM-vol, whose rate uses P_eff at the measured "
+      "density); the same holds for every PRFM* field.");
   list[6] = io_make_output_field(
       "PRFMEffectiveDispersions", FLOAT, 1, UNIT_CONV_VELOCITY, 0.f, xparts,
       sf_data.sigma_eff,
@@ -103,8 +106,22 @@ __attribute__((always_inline)) INLINE static int star_formation_write_particles(
       sf_data.H_g,
       "PRFM equilibrium gas half-thickness H_g = Sigma_g sigma_eff^2 / (2 W) "
       "(t_dyn = 2 H_g / sigma_eff), at the particle's last active step.");
+  list[10] = io_make_output_field(
+      "PRFMDepletionTimes", FLOAT, 1, UNIT_CONV_TIME, 0.f, xparts,
+      sf_data.t_dep,
+      "PRFM depletion time t_dep of the rate formulation, at the particle's "
+      "last active step: Upsilon_tot Sigma_g / W (PRFM-int, J26 eq. 32) or "
+      "Upsilon_tot(P_eff) t_dyn / (R_f sigma_eff(P_eff)) (PRFM-vol, J26 eq. "
+      "20). A star-forming particle has StarFormationRates = m_g / t_dep. Zero "
+      "if PRFM-int saw no gas on the map.");
+  list[11] = io_make_output_field(
+      "PRFMDynamicalTimes", FLOAT, 1, UNIT_CONV_TIME, 0.f, xparts,
+      sf_data.t_dyn,
+      "PRFM dynamical time t_dyn of the rate formulation, at the particle's "
+      "last active step: 2 H_g / sigma_eff (PRFM-int) or J26 eq. 26 at the "
+      "measured density (PRFM-vol). Zero if PRFM-int saw no gas on the map.");
 
-  return 10;
+  return 12;
 }
 
 /**

@@ -33,8 +33,9 @@ struct star_formation_xpart_data {
    * last SF episode */
   float SFR;
 
-  /*! PRFM-int state at the last active step (internal units, physical); all
-   * zero if the particle saw no gas on the map */
+  /*! PRFM-int state at the last active step (internal units, physical), in
+   * either rate formulation; all zero if the particle saw no gas on the map.
+   * Written for every gas particle, star-forming or not. */
 
   /*! Gas surface density Sigma_g used */
   float Sigma_g;
@@ -62,6 +63,12 @@ struct star_formation_xpart_data {
 
   /*! Equilibrium scale height H_g = Sigma_g / (2 rho_eq) */
   float H_g;
+
+  /*! Depletion time of the rate formulation (PRFM-int or PRFM-vol) */
+  float t_dep;
+
+  /*! Dynamical time of the rate formulation (PRFM-int or PRFM-vol) */
+  float t_dyn;
 };
 
 /**

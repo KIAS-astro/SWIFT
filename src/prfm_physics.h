@@ -25,7 +25,8 @@
  * the PRFM entropy floor and the unit test tests/testPRFM.c.
  *
  * PRFM-int (Jeffreson et al. 2026, J26, Sec. 2.6, eqs. 28-32) from surface
- * densities, with the TIGRESS calibrations of Ostriker & Kim (2022, OK22,
+ * densities, PRFM-vol (J26 Secs. 2.4-2.5) from the local density, with the
+ * TIGRESS calibrations of Ostriker & Kim (2022, OK22,
  * default) and Kim et al. (2024, K24).
  *
  * Units: everything is cgs. Surface densities in g cm^-2, volume densities in
@@ -336,6 +337,55 @@ static inline void prfm_int(const double Sigma_g, const double Sigma_s,
   out->H_g = Sigma_g * sigma * sigma / (2. * W);
   out->t_dyn = 2. * out->H_g / sigma;
   out->t_dep = prfm_upsilon(W, cal, Zprime) * Sigma_g / W;
+}
+
+/**
+ * @brief PRFM-vol (J26 Secs. 2.4-2.5): the rate from the local effective
+ * pressure and a local dynamical time.
+ *
+ * P_eff is the effective EoS at the measured n_H = rho_g / (1.4 m_H), and
+ * sigma_eff, Upsilon_tot are the calibration's at P_eff. The dynamical time is
+ * J26 eq. 26,
+ * t_dyn = 2 [2 pi G rho_g + 4 pi G rho_* / (1 + H_g / H_*)
+ *            + (4 pi / 3) G rho_d]^(-1/2),
+ * with the stellar midplane density rho_* = Sigma_* / (2 H_*) and the
+ * thickness ratio H_* / H_g = sigma_*z / sigma_eff of PRFM-int (J26 eq. 31)
+ * in place of J26's measured rho_* and cubic for H_g / H_* (eq. 27). With
+ * H_g = sigma_eff t_dyn / 2 (J26 eq. 2) the stellar term is
+ * 4 pi G Sigma_* / [(sigma_eff + sigma_*z) t_dyn], so A t_dyn^2 + B t_dyn = 4
+ * with A = 2 pi G rho_g + (4 pi / 3) G rho_d and
+ * B = 4 pi G Sigma_* / (sigma_eff + sigma_*z), whose positive root is
+ * t_dyn = 8 / [B + (B^2 + 16 A)^(1/2)]. Then
+ * t_dep = Upsilon_tot t_dyn / (R_f sigma_eff) (J26 eq. 20).
+ *
+ * @param rho_g Measured gas density [g cm^-3], > 0.
+ * @param Sigma_s Stellar surface density [g cm^-2].
+ * @param rho_d Dark matter density [g cm^-3].
+ * @param sigma_sz Stellar vertical dispersion [cm s^-1]; a negative value
+ * means sigma_*z = sigma_eff.
+ * @param cal The calibration.
+ * @param Zprime Metallicity in solar units.
+ * @param R_f Renormalisation of the rate (J26 eqs. 24-25; 2 in J26).
+ * @param out (return) The state; W holds P_eff.
+ */
+static inline void prfm_vol(const double rho_g, const double Sigma_s,
+                            const double rho_d, const double sigma_sz,
+                            const struct prfm_calibration *cal,
+                            const double Zprime, const double R_f,
+                            struct prfm_state *out) {
+  const double G = PRFM_NEWTON_G_CGS;
+  const double n_H = rho_g / (PRFM_MASS_PER_H * PRFM_PROTON_MASS_CGS);
+  const double P = prfm_eos_pressure(n_H, cal, Zprime);
+  const double sigma = prfm_sigma_eff(P, cal, Zprime);
+  const double A = 2. * M_PI * G * rho_g + 4. * M_PI / 3. * G * rho_d;
+  const double B =
+      4. * M_PI * G * Sigma_s / (sigma + (sigma_sz < 0. ? sigma : sigma_sz));
+  const double t_dyn = 8. / (B + sqrt(B * B + 16. * A));
+  out->W = P;
+  out->sigma_eff = sigma;
+  out->H_g = 0.5 * sigma * t_dyn;
+  out->t_dyn = t_dyn;
+  out->t_dep = prfm_upsilon(P, cal, Zprime) * t_dyn / (R_f * sigma);
 }
 
 /**

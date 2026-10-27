@@ -55,8 +55,12 @@
  * disc (src/prfm_map.h), rho_d from the Hernquist potential. As an option
  * Sigma_g is instead the kernel column rho_SPH / w(0; H_k) = rho_SPH H_k / 1.4
  * of the particle (cubic spline of support H_k = gamma_K h), which needs no
- * disc plane, with an optional bias correction. Conversion is stochastic as
- * in the EAGLE module: probability SFR dt / m_g per step.
+ * disc plane, with an optional bias correction. As another option the rate
+ * is PRFM-vol (J26 Secs. 2.4-2.5, src/prfm_physics.h prfm_vol()): P_eff of
+ * the effective EoS at the measured density, the J26 eq. 26 dynamical time
+ * with rho_* from the map's Sigma_* and sigma_*z, and R_f = 2; the PRFM-int
+ * state is still evaluated and written. Conversion is stochastic as in the
+ * EAGLE module: probability SFR dt / m_g per step.
  */
 
 /**
@@ -66,6 +70,14 @@ enum prfm_star_formation_threshold {
   prfm_threshold_measured,   /*<! n_H from the particle's density */
   prfm_threshold_equilibrium /*<! n_H,eq = Sigma_g / (2 H_g 1.4 m_H), and
                                   the measured n_H above a lower floor */
+};
+
+/**
+ * @brief Choice of rate formulation.
+ */
+enum prfm_formulation {
+  prfm_formulation_int, /*<! PRFM-int: t_dep = Upsilon_tot Sigma_g / W */
+  prfm_formulation_vol  /*<! PRFM-vol: P_eff at the measured density */
 };
 
 /**
@@ -95,6 +107,12 @@ struct star_formation {
 
   /*! Which calibration (for printing) */
   enum prfm_calibration_choice cal_choice;
+
+  /*! Rate formulation */
+  enum prfm_formulation formulation;
+
+  /*! Rate renormalisation R_f of PRFM-vol */
+  double vol_R_f;
 
   /*! Dark matter coefficient c_d of J26 eq. 31 */
   double c_d;
@@ -220,6 +238,8 @@ INLINE static int star_formation_prfm_state(
       xp->sf_data.sigma_eff = 0.f;
       xp->sf_data.rho_eq = 0.f;
       xp->sf_data.H_g = 0.f;
+      xp->sf_data.t_dep = 0.f;
+      xp->sf_data.t_dyn = 0.f;
     }
     return 0;
   }
@@ -243,8 +263,39 @@ INLINE static int star_formation_prfm_state(
     xp->sf_data.rho_eq = state->W / (state->sigma_eff * state->sigma_eff) /
                          starform->rho_to_cgs;
     xp->sf_data.H_g = state->H_g * starform->length_from_cgs;
+    xp->sf_data.t_dep = state->t_dep * starform->time_from_cgs;
+    xp->sf_data.t_dyn = state->t_dyn * starform->time_from_cgs;
   }
   return 1;
+}
+
+/**
+ * @brief Evaluate PRFM-vol at a particle: P_eff at the measured density,
+ * rho_* and sigma_*z from the face-on map, rho_d from the Hernquist halo
+ * (prfm_vol()).
+ *
+ * @param p The #part.
+ * @param starform The star formation properties.
+ * @param cosmo The current cosmological model.
+ * @param state (return) The PRFM-vol state (cgs).
+ * @param xp (return) If not NULL, t_dep and t_dyn are stored in its sf_data
+ * (internal units).
+ */
+INLINE static void star_formation_prfm_vol_state(
+    const struct part *p, const struct star_formation *starform,
+    const struct cosmology *cosmo, struct prfm_state *state,
+    struct xpart *xp) {
+
+  double Sigma_g, Sigma_s, sigma_sz, rho_d;
+  prfm_map_sample(p->x, &Sigma_g, &Sigma_s, &sigma_sz, &rho_d);
+  prfm_vol(hydro_get_physical_density(p, cosmo) * starform->rho_to_cgs,
+           Sigma_s * starform->Sigma_to_cgs, rho_d * starform->rho_to_cgs,
+           sigma_sz * starform->velocity_to_cgs, &starform->cal,
+           star_formation_prfm_Zprime(p, starform), starform->vol_R_f, state);
+  if (xp != NULL) {
+    xp->sf_data.t_dep = state->t_dep * starform->time_from_cgs;
+    xp->sf_data.t_dyn = state->t_dyn * starform->time_from_cgs;
+  }
 }
 
 /**
@@ -319,7 +370,11 @@ INLINE static void star_formation_compute_SFR(
   }
 
   struct prfm_state state;
-  if (!star_formation_prfm_state(p, starform, cosmo, &state, xp)) {
+  const int has_column =
+      star_formation_prfm_state(p, starform, cosmo, &state, xp);
+  if (starform->formulation == prfm_formulation_vol) {
+    star_formation_prfm_vol_state(p, starform, cosmo, &state, xp);
+  } else if (!has_column) {
     xp->sf_data.SFR = 0.f;
     return;
   }
@@ -398,6 +453,8 @@ INLINE static void star_formation_update_part_not_SFR(
   /* The PRFM state for the snapshots, as for star-forming particles */
   struct prfm_state state;
   star_formation_prfm_state(p, starform, e->cosmology, &state, xp);
+  if (starform->formulation == prfm_formulation_vol)
+    star_formation_prfm_vol_state(p, starform, e->cosmology, &state, xp);
 
   /* Check if it is the first time steps after star formation */
   if (xp->sf_data.SFR > 0.f) {
@@ -554,6 +611,21 @@ INLINE static void starformation_init_backend(
       parameter_file, "PRFMStarFormation:sigma_eff_floor",
       starform->cal.sigma_floor);
 
+  char form[32] = "int";
+  parser_get_opt_param_string(parameter_file, "PRFMStarFormation:formulation",
+                              form, "int");
+  if (strcmp(form, "int") == 0)
+    starform->formulation = prfm_formulation_int;
+  else if (strcmp(form, "vol") == 0)
+    starform->formulation = prfm_formulation_vol;
+  else
+    error("PRFMStarFormation:formulation must be 'int' or 'vol', got '%s'",
+          form);
+  /* J26 Sec. 2.5 adopts R_f = 2 (eq. 25: 1 marginally resolved, 2.3 well
+   * resolved, for an exponential profile) */
+  starform->vol_R_f = parser_get_opt_param_double(
+      parameter_file, "PRFMStarFormation:vol_R_f", 2.);
+
   starform->c_d = parser_get_opt_param_double(
       parameter_file, "PRFMStarFormation:c_d", 16. * M_PI / 3.);
   starform->n_iter = parser_get_opt_param_int(
@@ -702,6 +774,13 @@ INLINE static void starformation_print_backend(
   } else {
     message("Sigma_g from the face-on map");
   }
+  if (starform->formulation == prfm_formulation_vol)
+    message(
+        "Rate from PRFM-vol: P_eff of the EoS P/k_B = %.4g n_H^%.3g at the "
+        "measured density, t_dyn of J26 eq. 26 with rho_* = Sigma_* / (2 H_*), "
+        "H_* / H_g = sigma_*z / sigma_eff, R_f = %.3g; the PRFM-int state is "
+        "written as a diagnostic",
+        starform->cal.eos_norm, starform->cal.eos_slope, starform->vol_R_f);
   message("Will form %d stars per gas particle.",
           starform->num_stars_per_gas_particle);
 }
@@ -788,6 +867,8 @@ star_formation_first_init_part(const struct phys_const *phys_const,
   xp->sf_data.sigma_eff = 0.f;
   xp->sf_data.rho_eq = 0.f;
   xp->sf_data.H_g = 0.f;
+  xp->sf_data.t_dep = 0.f;
+  xp->sf_data.t_dyn = 0.f;
 }
 
 /**
